@@ -1,8 +1,9 @@
 # Flashcards für die Berufsschule
 
-Lernseiten mit Karteikarten und Multiple-Choice-Fragen. Jede Seite hat eine
-Adresse aus drei Wörtern, zum Beispiel `/rote-katze-springt`. Keine Anmeldung
-für Lernende, keine gespeicherten Ergebnisse.
+Lernseiten mit Karteikarten und Multiple-Choice-Fragen. Lernende erhalten
+von ihrer Lehrkraft einen Link zu einer Lernseite. Keine Anmeldung nötig,
+keine gespeicherten Ergebnisse. Die Lernseiten selbst werden noch nicht
+bereitgestellt – dieser Teil folgt in einem späteren Plan.
 
 Alles läuft in **einem** Container: PostgreSQL und Webserver, zusammengehalten
 von `supervisord`.
