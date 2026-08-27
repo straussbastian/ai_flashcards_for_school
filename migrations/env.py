@@ -20,7 +20,19 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-config.set_main_option("sqlalchemy.url", get_settings().database_url)
+# Die Datenbank-URL wird bewusst NICHT ueber config.set_main_option()
+# gesetzt: Alembics Config ist intern ein ConfigParser mit
+# BasicInterpolation, die '%' als Interpolationszeichen behandelt.
+# Ein Datenbankpasswort mit '%' (bei URL-kodierten Passwoertern der
+# Normalfall, z.B. '%40' fuer '@') laesst set_main_option() sofort mit
+# einem ValueError ("invalid interpolation syntax") scheitern - noch bevor
+# ueberhaupt ein Verbindungsversuch stattfindet. Die URL bleibt deshalb
+# eine reine Python-Variable und wird erst dort eingesetzt, wo sie
+# tatsaechlich gebraucht wird: direkt im Dict fuer async_engine_from_config
+# (siehe run_async_migrations) bzw. direkt als url= in
+# run_migrations_offline. Ein ConfigParser-Objekt ist an keiner Stelle
+# mehr beteiligt.
+datenbank_url = get_settings().database_url
 
 # add your model's MetaData object here
 # for 'autogenerate' support
@@ -44,9 +56,8 @@ def run_migrations_offline() -> None:
     script output.
 
     """
-    url = config.get_main_option("sqlalchemy.url")
     context.configure(
-        url=url,
+        url=datenbank_url,
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
@@ -69,8 +80,17 @@ async def run_async_migrations() -> None:
 
     """
 
+    # config.get_section(...) liefert ein reines dict (die Werte wurden
+    # zwar urspruenglich aus der .ini per ConfigParser gelesen, aber das
+    # Ergebnis selbst ist kein ConfigParser mehr). Die URL wird deshalb
+    # direkt als Dict-Eintrag ergaenzt statt ueber die .ini geschleust -
+    # ein '%' im Passwort ist an dieser Stelle nur ein Zeichen wie jedes
+    # andere, keine Interpolationssyntax.
+    konfiguration = config.get_section(config.config_ini_section, {})
+    konfiguration["sqlalchemy.url"] = datenbank_url
+
     connectable = async_engine_from_config(
-        config.get_section(config.config_ini_section, {}),
+        konfiguration,
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
     )
