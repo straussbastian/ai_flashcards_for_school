@@ -1,5 +1,3 @@
-import pytest
-
 from app.bundle_json import bauen
 from app.models import Bundle, Karte
 
@@ -77,7 +75,32 @@ def test_flashcard_traegt_keine_antwortfelder():
     assert "richtige_index" not in karte
 
 
-def test_leere_erklaerung_wird_weggelassen():
+def test_leere_erklaerung_wird_leerer_string():
     bundle = _bundle()
     bundle.karten = [_frage(1, "Frage", ["a", "b"], 0, erklaerung=None)]
-    assert "erklaerung" not in bauen(bundle)["karten"][0]
+    assert bauen(bundle)["karten"][0]["erklaerung"] == ""
+
+
+def test_beschreibung_mit_markdown_wird_zu_html():
+    bundle = _bundle(beschreibung="Das ist **wichtig** für die Klasse.")
+    ergebnis = bauen(bundle)
+    assert "<strong>wichtig</strong>" in ergebnis["beschreibung"]
+
+
+def test_leere_beschreibung_wird_leerer_string():
+    bundle = _bundle(beschreibung=None)
+    ergebnis = bauen(bundle)
+    assert ergebnis["beschreibung"] == ""
+
+
+def test_klasse_none_wird_leerer_string():
+    bundle = _bundle(klasse=None)
+    ergebnis = bauen(bundle)
+    assert ergebnis["klasse"] == ""
+
+
+def test_anzahl_bei_bundle_ohne_karten():
+    bundle = _bundle()
+    bundle.karten = []
+    ergebnis = bauen(bundle)
+    assert ergebnis["anzahl"] == {"gesamt": 0, "flashcards": 0, "fragen": 0}

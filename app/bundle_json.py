@@ -5,6 +5,11 @@ dabei: Nur `vorderseite`, `rueckseite`, `erklaerung` und `beschreibung`
 enthalten HTML, und dieses HTML kommt ausschliesslich aus `rendern()`.
 Antworttexte, Titel und Klasse bleiben Klartext - der Browser setzt sie
 als Text ein, nicht als HTML.
+
+Optionale Felder sind immer vorhanden und tragen bei Abwesenheit einen
+leeren String (`beschreibung`, `erklaerung`, `klasse`). Das gewährleistet
+eine konsistente Prüfung im Browser: `if (bundle.klasse)`, `if (karte.erklaerung)`
+usw. funktionieren überall gleich.
 """
 
 from app.markdown import rendern
@@ -18,9 +23,7 @@ def _karte(karte: Karte) -> dict:
         return daten
     daten["antworten"] = list(karte.antworten or [])
     daten["richtige_index"] = karte.richtige_index
-    erklaerung = rendern(karte.erklaerung)
-    if erklaerung:
-        daten["erklaerung"] = erklaerung
+    daten["erklaerung"] = rendern(karte.erklaerung)
     return daten
 
 
@@ -30,7 +33,7 @@ def bauen(bundle: Bundle) -> dict:
     return {
         "titel": bundle.titel,
         "beschreibung": rendern(bundle.beschreibung),
-        "klasse": bundle.klasse,
+        "klasse": bundle.klasse or "",
         "selbsteinschaetzung": bundle.selbsteinschaetzung,
         "reihenfolge": bundle.reihenfolge,
         "anzahl": {
