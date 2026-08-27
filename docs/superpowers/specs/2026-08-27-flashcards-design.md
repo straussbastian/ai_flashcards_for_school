@@ -143,7 +143,7 @@ Falsche Daten dürfen gar nicht erst hineinkommen – nicht nur die Anwendung pr
 
 ### Slug-Erzeugung
 
-Drei gepflegte deutsche Wortlisten (Adjektiv, Nomen, Verb), jeweils einige hundert Einträge, im Repo als Textdatei. Kleinbuchstaben, keine Umlaute in der URL, keine anstößigen oder verwechselbaren Wörter. Bei Kollision wird neu gezogen, maximal zehn Versuche, danach ein Fehler mit Klartextmeldung.
+Drei gepflegte deutsche Wortlisten (Adjektiv, Nomen, Verb), jeweils **mindestens 30 Einträge**, im Repo als Textdatei. 30 × 30 × 30 ergibt 27.000 Adressen – für eine Schule reichlich und nicht durchprobierbar. Wer erweitert, hält sich an dieselbe Regel; der Test `test_alle_woerter_sind_url_tauglich` erzwingt sie. Kleinbuchstaben, keine Umlaute in der URL, keine anstößigen oder verwechselbaren Wörter. Bei Kollision wird neu gezogen, maximal zehn Versuche, danach ein Fehler mit Klartextmeldung.
 
 ## 5. MCP-Server
 
