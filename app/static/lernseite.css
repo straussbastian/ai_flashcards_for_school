@@ -9,10 +9,12 @@
    Schrift bewusst system-ui: die echte Seite soll keine Webfont-
    Abhaengigkeit haben.
 
-   Ergaenzt wurde nur der Block "Gerendertes Markdown" ganz am Ende -
-   den brauchte der Prototyp nicht, weil er alle Inhalte als Klartext
-   gesetzt hat. Die echte Seite bekommt an vier Stellen Block-HTML aus
-   app/markdown.rendern(). Kein bestehender Wert wurde angefasst.
+   Ergaenzt wurden nur die beiden Bloecke ganz am Ende: "Gerendertes
+   Markdown" - den brauchte der Prototyp nicht, weil er alle Inhalte als
+   Klartext gesetzt hat, die echte Seite bekommt an vier Stellen
+   Block-HTML aus app/markdown.rendern() - und "Lange Inhalte", der eine
+   Hoehengrenze fuer den Zettel zieht. Kein bestehender Wert wurde
+   angefasst: keine Farbe, kein Winkel, keine Zeit, keine Groesse.
    ------------------------------------------------------------------ */
 
 :root {
@@ -468,10 +470,54 @@ body::before {
    Loesung, getrennt nur durch <br>. Ein Absatz erzeugte dort eine
    zusaetzliche Leerzeile - im Prototyp gab es keinen, weil dort ein
    reiner Textknoten stand. */
-.fehler .markdown :is(p, ul, ol, li) { display: inline; margin: 0; padding: 0; }
+/* Die Aufzaehlung deckt alle Blocktags ab, die app/markdown.py
+   durchlaesst (ERLAUBTE_TAGS): p, ul, ol, li, pre, blockquote, h3, h4.
+   Mit nur p, ul, ol, li blieben pre, blockquote, h3 und h4 Bloecke und
+   erzeugten genau die Leerzeile, die diese Regel verhindern soll. */
+.fehler .markdown :is(p, ul, ol, li, pre, blockquote, h3, h4) { display: inline; margin: 0; padding: 0; }
 
 /* Ein sehr langes Wort oder ein Codeblock aus dem Markdown darf die
    Karte nicht auseinanderziehen; die Seite scrollt laut Spec nie
    waagerecht. */
 .seite { overflow-wrap: break-word; }
 .seite pre { overflow-x: auto; }
+
+/* ===================== Lange Inhalte ===================== */
+
+/* Der zweite Block, der im Prototyp nicht steht - und die einzige
+   Stelle, an der Prototyp-CSS ueberhaupt eine Wirkung aendert.
+
+   .seite kannte weder eine Hoehengrenze noch einen Ueberlauf. Die
+   Rueckseite liegt absolut auf der Vorderseite (position: absolute;
+   inset: 0) und uebernimmt deren Hoehe. Solange die Rueckseite kuerzer
+   ist als die Vorderseite - wie in allen sechs Prototyp-Karten - faellt
+   das nicht auf. Mit echten Daten (Rueckseite plus Erklaerung, bis 5000
+   Zeichen je Feld) lief der Inhalt sichtbar ueber Fusszeile und
+   Tastenleiste hinaus, ohne zu scrollen; nachgemessen waren es 604 px
+   unter dem Zettelrand. Die Spec verlangt: "Lange Fragen scrollen
+   innerhalb der Karte."
+
+   Die Grenze: 100dvh minus dem, was ausserhalb der Karte steht.
+   Nachgemessen sind das 12,32rem am Handy (Kopfzeile, die beiden
+   Navigationsbalken, die Fussnote) und 12,81rem am Rechner (Kopfzeile,
+   Tastenleiste, Fussnote). 14,5rem deckt beide mit Luft ab.
+
+   Kurze Karten aendern sich dadurch nicht: min-height (20rem, am
+   kleinen Schirm 17rem) gewinnt in CSS gegen max-height, und wer die
+   Grenze nicht erreicht, sieht keine Scrollleiste - overflow-y: auto
+   zeigt sie nur, wenn wirklich etwas ueberlaeuft. Eine Scrollleiste bei
+   einer Zweizeilen-Antwort waere schlimmer als der Fehler.
+
+   overflow-x steht ausdruecklich dabei, weil es sonst stillschweigend
+   passiert: Steht eine Achse auf visible und die andere nicht, rechnet
+   CSS die erste auf auto hoch. Sichtbare Folge, hier nachgemessen an
+   Karte 1 von feste-tafel-prueft: Ein unteilbar langes Wort
+   ("Donaudampfschifffahrts...") ragte bisher ueber den Zettelrand auf
+   den dunklen Hintergrund hinaus; jetzt endet es am Rand und die 30 px
+   sind innerhalb der Karte erreichbar. Die Seite selbst scrollt
+   weiterhin nie waagerecht - das bleibt Zusage der Spec. */
+.seite {
+  max-height: calc(100dvh - 14.5rem);
+  overflow-y: auto;
+  overflow-x: auto;
+}
