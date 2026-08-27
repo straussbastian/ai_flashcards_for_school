@@ -145,6 +145,12 @@ Falsche Daten dürfen gar nicht erst hineinkommen – nicht nur die Anwendung pr
 
 Drei gepflegte deutsche Wortlisten (Adjektiv, Nomen, Verb), jeweils **mindestens 30 Einträge**, im Repo als Textdatei. 30 × 30 × 30 ergibt 27.000 Adressen – für eine Schule reichlich und nicht durchprobierbar. Wer erweitert, hält sich an dieselbe Regel; der Test `test_alle_woerter_sind_url_tauglich` erzwingt sie. Kleinbuchstaben, keine Umlaute in der URL, keine anstößigen oder verwechselbaren Wörter. Bei Kollision wird neu gezogen, maximal zehn Versuche, danach ein Fehler mit Klartextmeldung.
 
+**Die Eindeutigkeit erzwingt die Datenbank, nicht die Anwendung.** Auf `slug` liegt der Unique-Constraint `uq_bundles_slug`. Die Schleife in `freien_slug_finden()` prüft nur vorab, um den Normalfall ohne Fehler zu erledigen — verlassen darf sich niemand darauf: Zwischen „ist frei" und „ist eingetragen" liegt ein Moment, in dem ein zweiter Aufruf denselben Kandidaten ziehen kann.
+
+**Deshalb muss das Anlegen eines Bundles die Constraint-Verletzung abfangen und neu würfeln**, statt sie durchzureichen. Ein `IntegrityError` auf `uq_bundles_slug` ist kein Fehler, den die Lehrerin lesen soll — er ist ein Signal, es noch einmal zu versuchen. Erst wenn auch das wiederholt scheitert, gibt es eine Klartextmeldung.
+
+Zur Größenordnung: Die zehn Versuche tragen, bis der Adressraum zu einem Viertel gefüllt ist — bei 27.000 Adressen also bis rund 6.750 Lernseiten; die Wahrscheinlichkeit, dass alle zehn Züge danebengehen, liegt dort bei eins zu einer Million. Wird es enger, sind die Wortlisten der Hebel und nicht die Schleife: je 100 Wörter ergeben eine Million Adressen.
+
 ## 5. MCP-Server
 
 ### Transport und Absicherung
