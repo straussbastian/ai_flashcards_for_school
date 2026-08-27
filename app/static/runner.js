@@ -17,6 +17,7 @@
      5. Ein Bundle ohne Karten zeigt einen Hinweis statt des Knopfes.
      6. alsText() liest ohne innerHTML und trennt Bloecke.
      7. Die Rueckseite traegt einen Weiter-Knopf.
+     8. Tastenleiste und Tastenbedienung kommen aus einer Quelle.
 
    Ab Nummer 6 sind es Fehlerbehebungen: Der Prototyp kannte nur eine
    Konfiguration (selbsteinschaetzung: true) und nur kurze Texte,
@@ -249,25 +250,104 @@
 
   /* ================== Zeichnen ================== */
 
-  // Die Tastenleiste zeigt immer nur, was in genau diesem Moment geht.
-  // Eine Leiste, die Tasten nennt, die gerade nichts tun, erzieht dazu,
-  // sie nicht mehr zu lesen.
-  const tastenhinweis = () => {
-    // ABWEICHUNG 5: Ohne Karten gibt es nichts zu starten, also nennt
-    // die Leiste auch keine Taste.
-    if (ansicht === "start") return BUNDLE.anzahl.gesamt ? "Eingabetaste startet" : "";
-    if (ansicht === "ergebnis") return "A nochmal · B nur die Fehler · Esc zur Startseite";
-    const k = aktuelle();
-    if (k.art === "frage") {
-      return k.gewaehlt === null
-        ? "A B C D wählen · ← → blättern · Esc beenden"
-        : "← → blättern · Esc beenden";
+  /* Die Tastenleiste zeigt immer nur, was in genau diesem Moment geht.
+     Eine Leiste, die Tasten nennt, die gerade nichts tun, erzieht dazu,
+     sie nicht mehr zu lesen.
+
+     ABWEICHUNG 8: Im Prototyp standen zwei unabhaengige Beschreibungen
+     desselben Sachverhalts nebeneinander - die Leiste als feste Saetze
+     je Ansicht, die Bedienung als eigene Fallunterscheidung im
+     keydown-Hoerer weiter unten. Zwei Beschreibungen laufen frueher
+     oder spaeter auseinander, und diese taten es: Im Ergebnis ohne
+     Fehler bot die Leiste "B nur die Fehler" an, obwohl dieser Knopf
+     nur bei Fehlern ueberhaupt gebaut wird - ausgerechnet im besten
+     Lauf griff eine angebotene Taste ins Leere. Bei einer Frage mit nur
+     zwei Antworten nannte sie C und D.
+
+     Eine zusaetzliche if-Abfrage haette genau diesen einen Fall
+     zugedeckt und den naechsten abgewartet. Deshalb gibt es jetzt nur
+     noch eine Quelle: belegung() beschreibt fuer den aktuellen Zustand,
+     welche Taste was tut und wie sie in der Leiste heisst. Die Leiste
+     ist nichts anderes als die Beschriftung dieser Liste, und der
+     keydown-Hoerer fuehrt genau diese Liste aus. Eine Taste kann damit
+     nicht mehr angezeigt werden, ohne zu wirken - und nicht mehr
+     wirken, ohne angezeigt zu sein. Die Wortlaute stammen weiter aus
+     dem Prototyp.
+
+     tun() bekommt die gedrueckte Taste, damit ein Eintrag mehrere
+     Tasten zusammenfassen kann (A bis D, die beiden Pfeile). */
+  const belegung = () => {
+    const eintraege = [];
+
+    if (ansicht === "start") {
+      // ABWEICHUNG 5: Ohne Karten gibt es nichts zu starten, also nennt
+      // die Leiste auch keine Taste.
+      if (BUNDLE.anzahl.gesamt) {
+        eintraege.push({ tasten: ["Enter", " "], zeige: "Eingabetaste startet",
+                         tun: () => starten(BUNDLE.karten) });
+      }
+      return eintraege;
     }
-    if (!k.aufgedeckt) return "Leertaste umdrehen · ← → blättern · Esc beenden";
-    if (BUNDLE.selbsteinschaetzung && k.gewusst === null)
-      return "A wusste ich · B wusste ich nicht · ← → blättern · Esc beenden";
-    return "← → blättern · Esc beenden";
+
+    if (ansicht === "ergebnis") {
+      eintraege.push({ tasten: ["A", "Enter"], zeige: "A nochmal",
+                       tun: () => starten(BUNDLE.karten) });
+      // Der Knopf entsteht nur, wenn etwas danebenging - die Taste jetzt
+      // aus derselben Bedingung.
+      const daneben = danebenGegangen();
+      if (daneben.length) {
+        eintraege.push({ tasten: ["B"], zeige: "B nur die Fehler",
+                         tun: () => starten(daneben.map(ursprung)) });
+      }
+      eintraege.push({ tasten: ["Escape"], zeige: "Esc zur Startseite", tun: zeichneStart });
+      return eintraege;
+    }
+
+    const k = aktuelle();
+
+    if (k.art === "frage" && k.gewaehlt === null) {
+      // Nur so viele Buchstaben, wie es Antworten gibt: Eine Frage traegt
+      // laut Datenbank zwei bis vier.
+      const buchstaben = BUCHSTABEN.slice(0, k.gemischte.length);
+      eintraege.push({
+        tasten: buchstaben.concat(buchstaben.map((_, i) => String(i + 1))),
+        zeige: `${buchstaben.join(" ")} wählen`,
+        tun: (gedrueckt) => {
+          const nr = BUCHSTABEN.indexOf(gedrueckt);
+          antworten(nr >= 0 ? nr : Number(gedrueckt) - 1);
+        }
+      });
+    }
+
+    if (k.art === "flashcard" && !k.aufgedeckt) {
+      eintraege.push({ tasten: [" ", "Enter"], zeige: "Leertaste umdrehen", tun: umdrehen });
+    }
+
+    if (k.aufgedeckt === true && einschaetzungOffen(k)) {
+      eintraege.push({ tasten: ["A"], zeige: "A wusste ich", tun: () => einschaetzen(true) });
+      eintraege.push({ tasten: ["B"], zeige: "B wusste ich nicht", tun: () => einschaetzen(false) });
+    }
+
+    // Dieselbe Bedingung wie der Weiter-Knopf auf der Rueckseite
+    // (ABWEICHUNG 7), damit Knopf und Taste nicht auseinanderlaufen.
+    if (weiterOffen(k)) {
+      eintraege.push({ tasten: ["A", "Enter", " "],
+                       zeige: letzteKarte() ? "A Ergebnis" : "A weiter", tun: vor });
+    }
+
+    // Auf der ersten Karte gibt es nichts zurueckzublaettern - der Knopf
+    // unten ist im selben Fall disabled, also nennt die Leiste den
+    // Linkspfeil hier auch nicht.
+    eintraege.push(lauf.index === 0
+      ? { tasten: ["ArrowRight"], zeige: "→ blättern", tun: vor }
+      : { tasten: ["ArrowLeft", "ArrowRight"], zeige: "← → blättern",
+          tun: (gedrueckt) => (gedrueckt === "ArrowRight" ? vor() : zurueck()) });
+
+    eintraege.push({ tasten: ["Escape"], zeige: "Esc beenden", tun: zeichneStart });
+    return eintraege;
   };
+
+  const tastenhinweis = () => belegung().map((e) => e.zeige).join(" · ");
 
   const kopfUndFussSetzen = () => {
     const imLauf = ansicht === "karte";
@@ -583,66 +663,30 @@
   $("zurueck").addEventListener("click", zurueck);
   $("beenden-knopf").addEventListener("click", zeichneStart);
 
-  // Alles, was klickbar ist, ist auch mit der Tastatur erreichbar. Wo zwei
-  // Moeglichkeiten zur Wahl stehen, sind es immer A und B - dieselbe Geste
-  // wie bei den Antworten, damit man sich nur eine Regel merken muss.
-  const taste = (el) => el?.click();
+  /* Alles, was klickbar ist, ist auch mit der Tastatur erreichbar. Wo
+     zwei Moeglichkeiten zur Wahl stehen, sind es immer A und B -
+     dieselbe Geste wie bei den Antworten, damit man sich nur eine Regel
+     merken muss.
+
+     ABWEICHUNG 8: Der Prototyp loeste die Tasten aus, indem er den
+     passenden Knopf suchte und anklickte. Das ging nur gut, solange
+     Leiste, Hoerer und Knopfliste dasselbe meinten. Jetzt rufen Knopf
+     und Taste dieselbe Funktion auf, und belegung() sagt, welche. */
 
   document.addEventListener("keydown", (e) => {
-    const gross = e.key.toUpperCase();
-
-    if (ansicht === "start") {
-      if (e.key === "Enter" || e.key === " ") {
+    // ABWEICHUNG 8: Der Hoerer entscheidet nichts mehr selbst, er fuehrt
+    // aus, was belegung() fuer den aktuellen Zustand nennt - und das ist
+    // genau das, was auch in der Tastenleiste steht. Verglichen wird die
+    // Taste roh und in Grossschreibung, damit "a" wie "A" wirkt und
+    // "Enter", " " oder "ArrowRight" unveraendert durchgehen.
+    const gross = e.key.length === 1 ? e.key.toUpperCase() : e.key;
+    for (const eintrag of belegung()) {
+      if (eintrag.tasten.includes(e.key) || eintrag.tasten.includes(gross)) {
         e.preventDefault();
-        // Ohne Karten gibt es keinen Knopf; dann passiert hier nichts.
-        taste($("karte").querySelector(".knopf"));
-      }
-      return;
-    }
-
-    if (ansicht === "ergebnis") {
-      if (e.key === "Escape") { e.preventDefault(); zeichneStart(); return; }
-      const knoepfe = $("karte").querySelectorAll(".ergebnis-knoepfe .knopf");
-      if (gross === "A" || e.key === "Enter") { e.preventDefault(); taste(knoepfe[0]); }
-      if (gross === "B") { e.preventDefault(); taste(knoepfe[1]); }
-      return;
-    }
-
-    const k = aktuelle();
-
-    if (e.key === "Escape") { e.preventDefault(); zeichneStart(); return; }
-    if (e.key === "ArrowRight") { e.preventDefault(); vor(); return; }
-    if (e.key === "ArrowLeft") { e.preventDefault(); zurueck(); return; }
-
-    if (k.art === "flashcard") {
-      // Vorderseite: umdrehen. Rueckseite: einschaetzen.
-      if (!k.aufgedeckt) {
-        if (e.key === " " || e.key === "Enter") { e.preventDefault(); umdrehen(); }
+        eintrag.tun(gross);
         return;
       }
-      if (einschaetzungOffen(k)) {
-        if (gross === "A") { e.preventDefault(); einschaetzen(true); }
-        if (gross === "B") { e.preventDefault(); einschaetzen(false); }
-      } else if (gross === "A" || e.key === " " || e.key === "Enter") {
-        // ABWEICHUNG 7: A gehoert jetzt zum Weiter-Knopf der Rueckseite.
-        // Wo nur eine Moeglichkeit zur Wahl steht, ist es A - dieselbe
-        // Geste wie bei "A nochmal" im Ergebnis. Leertaste und
-        // Eingabetaste tun wie im Prototyp weiter dasselbe.
-        e.preventDefault(); vor();
-      }
-      return;
     }
-
-    if (k.gewaehlt !== null) {
-      // Frage ist beantwortet - nur noch weiter und blaettern.
-      // ABWEICHUNG 7: A bedient den neuen Weiter-Knopf.
-      if (gross === "A" || e.key === " " || e.key === "Enter") { e.preventDefault(); vor(); }
-      return;
-    }
-    const treffer = BUCHSTABEN.indexOf(gross);
-    if (treffer >= 0 && treffer < k.gemischte.length) { e.preventDefault(); antworten(treffer); return; }
-    const zahl = Number(e.key);
-    if (zahl >= 1 && zahl <= k.gemischte.length) { e.preventDefault(); antworten(zahl - 1); }
   });
 
   zeichneStart();
