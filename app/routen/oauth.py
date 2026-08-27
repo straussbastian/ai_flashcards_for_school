@@ -18,7 +18,15 @@ from app.config import get_settings
 from app.db import get_session
 from app.oauth.metadaten import SCOPE, autorisierungsserver, geschuetzte_resource
 from app.oauth.redirect import CLAUDE_RUECKSPRUNG, passt, registrierbar
-from app.oauth.speicher import client_anlegen, client_holen, code_ausgeben
+from app.oauth.speicher import (
+    OAuthFehler,
+    client_anlegen,
+    client_holen,
+    code_ausgeben,
+    code_einloesen,
+    erneuern,
+    tokenpaar_ausgeben,
+)
 from app.templates import rendern
 
 router = APIRouter()
@@ -292,3 +300,75 @@ async def zustimmung_erteilen(
     if werte["state"] is not None:
         teile.append(f"state={quote(werte['state'])}")
     return RedirectResponse(ziel + trenner + "&".join(teile), status_code=302)
+
+
+def _tokenantwort(zugriff: str, erneuerung: str, gueltigkeit: int, scope: str) -> JSONResponse:
+    """Die Antwort nach RFC 6749 Abschnitt 5.1."""
+    return JSONResponse(
+        {
+            "access_token": zugriff,
+            "token_type": "Bearer",
+            "expires_in": gueltigkeit,
+            "refresh_token": erneuerung,
+            "scope": scope,
+        },
+        headers={**OEFFENTLICH, **NICHT_SPEICHERN},
+    )
+
+
+@router.post("/oauth/token")
+async def token_ausgeben(
+    anfrage: Request, sitzung: AsyncSession = Depends(get_session)
+) -> JSONResponse:
+    """Code einloesen oder Tokenpaar erneuern.
+
+    Der Koerper ist application/x-www-form-urlencoded, so verlangt es die
+    Spec in Abschnitt 5 (und RFC 6749). Gelesen wird er von Hand statt ueber
+    Form(...)-Parameter im Funktionskopf: Ein fehlendes Pflichtfeld
+    beantwortet FastAPI sonst mit 422 und einer englischen Pydantic-Liste,
+    waehrend OAuth hier 400 mit einem "error"-Feld verlangt - und genau das
+    wertet Claude aus.
+    """
+    formular = await anfrage.form()
+    grant_type = formular.get("grant_type")
+
+    try:
+        if grant_type == "authorization_code":
+            eingeloest = await code_einloesen(
+                sitzung,
+                code=str(formular.get("code") or ""),
+                client_id=str(formular.get("client_id") or ""),
+                redirect_uri=str(formular.get("redirect_uri") or ""),
+                code_verifier=str(formular.get("code_verifier") or ""),
+            )
+            zugriff, erneuerung, gueltigkeit = await tokenpaar_ausgeben(
+                sitzung,
+                client_id=eingeloest.client_id,
+                familie_id=eingeloest.familie_id,
+                scope=eingeloest.scope,
+                resource=eingeloest.resource,
+            )
+            scope = eingeloest.scope
+        elif grant_type == "refresh_token":
+            zugriff, erneuerung, gueltigkeit = await erneuern(
+                sitzung,
+                erneuerungstoken=str(formular.get("refresh_token") or ""),
+                client_id=str(formular.get("client_id") or ""),
+            )
+            scope = SCOPE
+        else:
+            return _fehler(
+                "unsupported_grant_type",
+                "Dieser Server kennt nur die Ablaeufe 'authorization_code' "
+                "und 'refresh_token'.",
+            )
+    except OAuthFehler as fehler:
+        # commit statt rollback: code_einloesen() und erneuern() ziehen bei
+        # einer Wiederverwendung die ganze Tokenfamilie zurueck - dieser
+        # Widerruf muss auch dann bestehen bleiben, wenn die Anfrage
+        # abgelehnt wird. Genau dafuer wurde er geschrieben.
+        await sitzung.commit()
+        return _fehler(fehler.code, fehler.beschreibung)
+
+    await sitzung.commit()
+    return _tokenantwort(zugriff, erneuerung, gueltigkeit, scope)
