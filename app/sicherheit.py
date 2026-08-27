@@ -22,7 +22,10 @@ RICHTLINIE = "; ".join([
 
 
 class Schutzkoepfe(BaseHTTPMiddleware):
+    """Haengt die Richtlinie und zwei weitere Schutzkoepfe an jede Antwort."""
+
     async def dispatch(self, request, call_next):
+        """Laesst die Anfrage durch und ergaenzt die Antwort um die Schutzkoepfe."""
         antwort = await call_next(request)
         antwort.headers["Content-Security-Policy"] = RICHTLINIE
         antwort.headers["X-Content-Type-Options"] = "nosniff"
