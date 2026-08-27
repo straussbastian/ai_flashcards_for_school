@@ -1,0 +1,103 @@
+# Flashcards für die Berufsschule
+
+Lernseiten mit Karteikarten und Multiple-Choice-Fragen. Jede Seite hat eine
+Adresse aus drei Wörtern, zum Beispiel `/rote-katze-springt`. Keine Anmeldung
+für Lernende, keine gespeicherten Ergebnisse.
+
+Alles läuft in **einem** Container: PostgreSQL und Webserver, zusammengehalten
+von `supervisord`.
+
+## Das Wichtigste zuerst: das Volume
+
+Die Datenbank läuft im selben Container wie die Anwendung und liegt unter
+`/data/pgdata`. Es muss ein persistentes Volume auf **`/data`** gemountet sein
+– in Coolify unter *Persistent Storage*, lokal erledigt das `run-local.sh`.
+
+Ohne dieses Volume startet der Container bewusst nicht, sondern bricht mit
+einer Klartextmeldung ab – lieber ein klarer Fehler als stillschweigend
+verlorene Lernseiten.
+
+Damit ist auch die Sicherung geklärt: Alles Sicherungswürdige liegt unter
+`/data`; wer dieses Volume sichert, hat alles. Die Anwendung selbst bringt
+deshalb keine Backup-Funktion mit.
+
+## Den Container lokal betreiben
+
+```bash
+./run-local.sh
+```
+
+Das Skript baut das Image, legt `./daten` als Volume an und startet den
+Container auf `http://localhost:8000`. Der erste Start dauert länger, weil das
+Datenbank-Cluster angelegt wird. Prüfen:
+
+```bash
+curl -s http://localhost:8000/healthz
+# {"status":"ok","datenbank":"ok"}
+```
+
+Logs mitlesen mit `docker logs -f flashcards-lokal`, stoppen mit
+`docker rm -f flashcards-lokal`. Das Verzeichnis `./daten` bleibt liegen –
+beim nächsten Start ist alles wieder da.
+
+Die Passwörter in `run-local.sh` sind Entwicklungspasswörter und stehen
+absichtlich im Klartext. Für den Betrieb werden die Werte in Coolify gesetzt.
+
+## Entwicklung
+
+Für die Arbeit am Code läuft die Datenbank außerhalb des Containers, über
+`compose.dev.yml` auf Port 55432:
+
+```bash
+uv sync
+docker compose -f compose.dev.yml up -d
+cp .env.example .env          # Werte anpassen, Port 55432
+set -a; . ./.env; set +a
+uv run alembic upgrade head
+uv run uvicorn app.main:app --reload
+```
+
+Tests (die Testdatenbank wird einmalig angelegt):
+
+```bash
+docker compose -f compose.dev.yml exec db createdb -U flashcards flashcards_test
+set -a; . ./.env; set +a
+uv run pytest
+```
+
+Die Container-Tests bauen das Image und brauchen ein laufendes Docker. Ohne
+Docker werden sie übersprungen.
+
+## Betrieb auf Coolify
+
+Coolify zieht sich das Repository selbst per CI/CD. Einzurichten ist dort:
+
+1. Neue Anwendung aus diesem Git-Repository, Build über das `Dockerfile`
+2. **Persistent Storage: Volume auf `/data`** – ohne das startet der Container nicht
+3. Umgebungsvariablen aus `.env.example` setzen; `DATABASE_URL` zeigt auf
+   `localhost:5432` **im** Container, das Passwort darin muss zu
+   `POSTGRES_PASSWORD` passen, `BASE_URL` auf die echte Domain
+4. Domain zuweisen, HTTPS aktivieren
+5. Healthcheck auf `/healthz`
+6. **Stop-Grace-Period großzügig setzen** (mindestens 60 Sekunden). PostgreSQL
+   bekommt beim Herunterfahren bewusst Zeit für einen sauberen Checkpoint
+   (`stopwaitsecs=30` in `docker/supervisord.conf`). Ist die Grace-Period zu
+   knapp, wird es abgeschossen und fährt beim nächsten Start per
+   Crash-Recovery hoch – langsamer und ohne Not riskant.
+
+## Inhalte pflegen
+
+Es gibt bewusst **keine Administrationsoberfläche**. Die Lernseiten werden
+später ausschließlich über einen MCP-Server gepflegt, den ein KI-Agent
+bedient. Dieser Teil ist noch nicht gebaut.
+
+## Aufbau
+
+| Verzeichnis | Inhalt |
+|---|---|
+| `app/` | Anwendung |
+| `migrations/` | Alembic |
+| `docker/` | Startskripte und Prozessverwaltung |
+| `tests/` | Testsuite |
+| `docs/superpowers/specs/` | Design-Spec |
+| `docs/design/mockups/` | Freigegebene Entwürfe – Referenz für die Optik |

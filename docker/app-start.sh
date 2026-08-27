@@ -38,8 +38,14 @@ ende = time.monotonic() + FRIST_SEKUNDEN
 letzter_fehler = None
 
 while True:
-    maschine = create_engine(url, connect_args={"connect_timeout": 3})
+    # create_engine gehoert mit in den try-Block: Eine DATABASE_URL, die zwar
+    # durch die Pydantic-Pruefung kommt, aber von SQLAlchemy nicht getragen
+    # wird - etwa postgres:// statt postgresql+psycopg:// -, liesse den
+    # Aufruf sonst mit einem unbehandelten Fehler fliegen. Es gaebe einen
+    # Python-Traceback statt der Klartextmeldung weiter unten.
+    maschine = None
     try:
+        maschine = create_engine(url, connect_args={"connect_timeout": 3})
         with maschine.connect() as verbindung:
             verbindung.execute(text("SELECT 1"))
         print("Datenbank ist erreichbar.")
@@ -47,7 +53,8 @@ while True:
     except Exception as fehler:  # noqa: BLE001
         letzter_fehler = fehler
     finally:
-        maschine.dispose()
+        if maschine is not None:
+            maschine.dispose()
     if time.monotonic() >= ende:
         break
     time.sleep(1)
@@ -60,12 +67,22 @@ print("", file=sys.stderr)
 print("Wahrscheinliche Gruende:", file=sys.stderr)
 print("  - PostgreSQL im Container ist nicht hochgekommen", file=sys.stderr)
 print(
-    "  - Rolle oder Datenbank 'flashcards' fehlen (db-init.sh hat nicht "
+    "  - Rolle oder Datenbank 'flashcards' fehlen (db-init.sh ist nicht "
     "durchgelaufen - siehe dessen Meldungen weiter oben im Log)",
     file=sys.stderr,
 )
 print(
     "  - das Passwort in DATABASE_URL passt nicht zu POSTGRES_PASSWORD",
+    file=sys.stderr,
+)
+print(
+    "  - Host oder Port in DATABASE_URL zeigen nicht auf die Datenbank im "
+    "Container (erwartet wird localhost:5432)",
+    file=sys.stderr,
+)
+print(
+    "  - das Schema in DATABASE_URL wird von SQLAlchemy nicht getragen "
+    "(erwartet wird postgresql+psycopg://, nicht postgres://)",
     file=sys.stderr,
 )
 print("", file=sys.stderr)

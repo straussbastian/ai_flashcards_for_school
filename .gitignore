@@ -22,3 +22,5 @@ pgdata/
 .DS_Store
 .idea/
 .vscode/
+
+daten/

@@ -49,7 +49,18 @@ EXPOSE 8000
 # Docker/Coolify markieren den Container als "unhealthy", wenn /healthz
 # nicht mehr antwortet. Der Container wird dadurch nicht beendet — die
 # Betriebsebene (Docker/Coolify) reagiert darauf, nicht die Anwendung.
-HEALTHCHECK --interval=15s --timeout=5s --start-period=90s --retries=3 \
+#
+# ACHTUNG, gekoppelte Zahlen: --start-period muss deutlich groesser sein als
+# FRIST_SEKUNDEN in docker/app-start.sh (dort 90s). Die beiden Uhren laufen
+# nicht synchron: Die Frist in app-start.sh beginnt erst, wenn supervisord
+# den App-Prozess startet; die Healthcheck-Uhr laeuft schon ab Containerstart
+# und enthaelt damit auch initdb und den Anlauf von Postgres. Die
+# Healthcheck-Uhr ist also immer die strengere. Waeren beide gleich, wuerde
+# der Container auf langsamem Speicher bei rund 135 Sekunden als "unhealthy"
+# gelten, obwohl der naechste Versuch der App durchgelaufen waere - Coolify
+# koennte ein gutes Deployment als gescheitert zurueckrollen. Wer eine der
+# beiden Zahlen aendert, muss die andere mitdenken.
+HEALTHCHECK --interval=15s --timeout=5s --start-period=180s --retries=3 \
     CMD python3 -c "import sys, urllib.request; \
 sys.exit(0 if urllib.request.urlopen('http://localhost:8000/healthz', timeout=3).status == 200 else 1)"
 
