@@ -39,6 +39,17 @@ depends_on: Union[str, Sequence[str], None] = None
 # nicht als VARCHAR(n): Eine ueberlange Eingabe soll denselben Fehlertyp
 # ausloesen wie jede andere verletzte Regel (IntegrityError mit lesbarem
 # Constraint-Namen), nicht ein DataError aus der Typkonvertierung.
+#
+# Leerraum, den die Datenbank wie Python behandeln muss: btrim(x) ohne
+# zweites Argument trimmt ausschliesslich U+0020. Pythons str.strip()
+# behandelt daneben auch Tab/LF/CR/VT/FF und das geschuetzte Leerzeichen
+# U+00A0 (NBSP) als Leerraum - ohne diese Liste ginge ein einzelnes NBSP
+# durch jeden *_nicht_leer-Constraint. Bewusst als SQL-Ausdruck statt als
+# literales Zeichen im Quelltext (kein unsichtbares NBSP im Quellcode). Siehe
+# denselben Kommentar bei _LEERRAUM_SQL in app/models.py fuer die vollstaendige
+# Begruendung, auch warum dies nicht Pythons komplette Unicode-Leerraumtabelle
+# nachbildet.
+LEERRAUM_SQL = "' ' || chr(9) || chr(10) || chr(13) || chr(11) || chr(12) || chr(160)"
 
 
 def upgrade() -> None:
@@ -56,8 +67,9 @@ def upgrade() -> None:
     sa.Column('geaendert_am', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
     sa.CheckConstraint("reihenfolge IN ('zufall', 'fest')", name='ck_bundles_reihenfolge'),
     # NOT NULL allein liesse einen Leerstring oder reine Leerzeichen durch.
-    sa.CheckConstraint("length(btrim(titel)) > 0", name='ck_bundles_titel_nicht_leer'),
-    sa.CheckConstraint("length(btrim(slug)) > 0", name='ck_bundles_slug_nicht_leer'),
+    # LEERRAUM_SQL siehe Kommentarblock oben.
+    sa.CheckConstraint(f"length(btrim(titel, {LEERRAUM_SQL})) > 0", name='ck_bundles_titel_nicht_leer'),
+    sa.CheckConstraint(f"length(btrim(slug, {LEERRAUM_SQL})) > 0", name='ck_bundles_slug_nicht_leer'),
     # Laengengrenzen, siehe Kommentarblock oben. length(NULL) ist NULL und ein
     # CHECK gilt bei NULL als erfuellt - die optionalen Spalten brauchen
     # deshalb kein zusaetzliches "IS NULL OR".
@@ -65,6 +77,9 @@ def upgrade() -> None:
     sa.CheckConstraint("length(titel) <= 200", name='ck_bundles_titel_max_laenge'),
     # beschreibung ist Markdown und geht durch app/markdown.rendern().
     sa.CheckConstraint("length(beschreibung) <= 5000", name='ck_bundles_beschreibung_max_laenge'),
+    # beschreibung ist optional, deshalb "IS NULL OR ...": wenn gesetzt, dann
+    # mit sichtbarem Inhalt, dieselbe Machart wie erklaerung bei karten unten.
+    sa.CheckConstraint(f"beschreibung IS NULL OR length(btrim(beschreibung, {LEERRAUM_SQL})) > 0", name='ck_bundles_beschreibung_nicht_leer'),
     # 60 Zeichen fuer die Klasse: fasst auch "Fachinformatiker
     # Systemintegration 23b" und nicht nur "FS 23b".
     sa.CheckConstraint("length(klasse) <= 60", name='ck_bundles_klasse_max_laenge'),
@@ -93,13 +108,14 @@ def upgrade() -> None:
     sa.CheckConstraint("art IN ('flashcard', 'frage')", name='ck_karten_art'),
     sa.CheckConstraint("position >= 0", name='ck_karten_position_nicht_negativ'),
     # NOT NULL allein liesse einen Leerstring oder reine Leerzeichen durch.
-    sa.CheckConstraint("length(btrim(vorderseite)) > 0", name='ck_karten_vorderseite_nicht_leer'),
+    # LEERRAUM_SQL siehe Kommentarblock oben.
+    sa.CheckConstraint(f"length(btrim(vorderseite, {LEERRAUM_SQL})) > 0", name='ck_karten_vorderseite_nicht_leer'),
     # rueckseite ist bei einer Frage NULL (erlaubt) und bei einer Flashcard
     # Pflicht (siehe ck_karten_felder_passen_zur_art). "IS NULL OR ..."
     # deckt beide Faelle ab.
-    sa.CheckConstraint("rueckseite IS NULL OR length(btrim(rueckseite)) > 0", name='ck_karten_rueckseite_nicht_leer'),
+    sa.CheckConstraint(f"rueckseite IS NULL OR length(btrim(rueckseite, {LEERRAUM_SQL})) > 0", name='ck_karten_rueckseite_nicht_leer'),
     # erklaerung in derselben Machart: optional, aber wenn gesetzt, mit Inhalt.
-    sa.CheckConstraint("erklaerung IS NULL OR length(btrim(erklaerung)) > 0", name='ck_karten_erklaerung_nicht_leer'),
+    sa.CheckConstraint(f"erklaerung IS NULL OR length(btrim(erklaerung, {LEERRAUM_SQL})) > 0", name='ck_karten_erklaerung_nicht_leer'),
     # Laengengrenzen, siehe Kommentarblock oben. Alle drei Spalten sind
     # Markdown und gehen durch app/markdown.rendern().
     sa.CheckConstraint("length(vorderseite) <= 5000", name='ck_karten_vorderseite_max_laenge'),
@@ -123,7 +139,15 @@ def upgrade() -> None:
     # zweier Anzahlen: jsonb_path_query_array() ist immutable, kommt ohne
     # Unterabfrage aus und liefert genau die Elemente vom Typ String. Sind
     # das genauso viele wie insgesamt, ist jedes Element ein String.
-    sa.CheckConstraint("\n            CASE\n                WHEN art <> 'frage' THEN true\n                WHEN jsonb_typeof(antworten) = 'array'\n                    THEN jsonb_array_length(antworten) = jsonb_array_length(\n                        jsonb_path_query_array(\n                            antworten, '$[*] ? (@.type() == \"string\")'))\n                ELSE false\n            END\n            ", name='ck_karten_antworten_sind_texte'),
+    #
+    # "strict" vor dem Pfad ist Pflicht: Ohne dieses Schluesselwort laeuft
+    # $[*] im Default-Modus "lax", und lax packt ein verschachteltes Array
+    # wie [["Zagreb"], ["Berlin"]] eine Ebene tief aus, bevor der Filter
+    # greift - der Constraint haelt dann trotz verschachtelter Liste. Mit
+    # "strict" wertet der Filter jedes Element von $[*] so aus, wie es
+    # dasteht, ohne Auspacken. Gegen PostgreSQL 17 nachgemessen fuer
+    # [["Zagreb"], ["Berlin"]] und [["a"], "b"].
+    sa.CheckConstraint("\n            CASE\n                WHEN art <> 'frage' THEN true\n                WHEN jsonb_typeof(antworten) = 'array'\n                    THEN jsonb_array_length(antworten) = jsonb_array_length(\n                        jsonb_path_query_array(\n                            antworten, 'strict $[*] ? (@.type() == \"string\")'))\n                ELSE false\n            END\n            ", name='ck_karten_antworten_sind_texte'),
     # Eine Antwortmoeglichkeit ohne sichtbaren Text ist auf der Karte ein
     # leerer Knopf. Der Pfadausdruck sucht ein Element, das ein String ist
     # und kein Zeichen ausserhalb der Leerzeichen enthaelt; der Constraint
@@ -132,7 +156,17 @@ def upgrade() -> None:
     # ausschliesslich ck_karten_antworten_sind_texte verletzen, damit der
     # gemeldete Constraint-Name eindeutig ist - PostgreSQL garantiert keine
     # Reihenfolge, in der Constraints geprueft werden.
-    sa.CheckConstraint("\n            CASE\n                WHEN art <> 'frage' THEN true\n                WHEN jsonb_typeof(antworten) = 'array'\n                    THEN NOT jsonb_path_exists(\n                        antworten,\n                        '$[*] ? (@.type() == \"string\"'\n                        ' && !(@ like_regex \"[^[:space:]]\"))')\n                ELSE false\n            END\n            ", name='ck_karten_antworten_nicht_leer'),
+    #
+    # "strict" aus demselben Grund wie bei ck_karten_antworten_sind_texte
+    # oben. [^[:space:]<NBSP>] statt nur [^[:space:]]: Die POSIX-Klasse
+    # [:space:] kennt kein NBSP (U+00A0), das Pythons str.strip() als
+    # Leerraum behandelt (siehe LEERRAUM_SQL oben) - eine Antwort aus einem
+    # einzelnen NBSP ging bislang durch. Das Zeichen steht nicht als Escape
+    # im String (jsonpath-like_regex kennt kein \u-Escape), sondern wird per
+    # chr(160) angehaengt und der Ausdruck dynamisch zu jsonpath gecastet -
+    # chr() und der Cast text->jsonpath sind beide immutable, also in einem
+    # CHECK zulaessig (gegen PostgreSQL 17 nachgemessen).
+    sa.CheckConstraint("\n            CASE\n                WHEN art <> 'frage' THEN true\n                WHEN jsonb_typeof(antworten) = 'array'\n                    THEN NOT jsonb_path_exists(\n                        antworten,\n                        ('strict $[*] ? (@.type() == \"string\"'\n                         ' && !(@ like_regex \"[^[:space:]' || chr(160) || ']\"))'\n                        )::jsonpath)\n                ELSE false\n            END\n            ", name='ck_karten_antworten_nicht_leer'),
     sa.CheckConstraint("\n            CASE\n                WHEN art <> 'frage' THEN true\n                WHEN jsonb_typeof(antworten) = 'array'\n                    THEN richtige_index >= 0\n                        AND richtige_index < jsonb_array_length(antworten)\n                ELSE false\n            END\n            ", name='ck_karten_richtige_index_im_bereich'),
     sa.ForeignKeyConstraint(['bundle_id'], ['bundles.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id'),

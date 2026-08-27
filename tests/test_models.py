@@ -254,12 +254,41 @@ async def test_flashcard_mit_leerer_rueckseite_wird_abgelehnt(session, leerer_we
     assert _constraint_name(exc_info) == "ck_karten_rueckseite_nicht_leer"
 
 
-@pytest.mark.parametrize("leerer_wert", ["", "   "], ids=["leerstring", "nur_leerzeichen"])
+@pytest.mark.parametrize(
+    "leerer_wert",
+    ["", "   ", "\u00a0"],
+    ids=["leerstring", "nur_leerzeichen", "geschuetztes_leerzeichen_nbsp"],
+)
 async def test_bundle_mit_leerem_titel_wird_abgelehnt(session, leerer_wert):
+    """Der NBSP-Fall (U+00A0) belegt die Machart aus _LEERRAUM_SQL in app/models.py.
+
+    btrim() ohne zweites Argument trimmt nur das ASCII-Leerzeichen U+0020 -
+    ein Titel aus einem einzelnen geschuetzten Leerzeichen ging deshalb
+    frueher durch, obwohl Pythons str.strip() ihn als leer behandelt.
+    Dieselbe Machart (btrim mit expliziter Zeichenmenge) steckt auch in
+    ck_bundles_slug_nicht_leer, ck_karten_vorderseite_nicht_leer,
+    ck_karten_rueckseite_nicht_leer, ck_karten_erklaerung_nicht_leer,
+    ck_bundles_beschreibung_nicht_leer und - als Regex-Zeichenklasse statt
+    btrim - in ck_karten_antworten_nicht_leer; ein Test je Spalte waere hier
+    zu viel.
+    """
     session.add(Bundle(slug="gruene-eule-liest", titel=leerer_wert))
     with pytest.raises(IntegrityError) as exc_info:
         await session.flush()
     assert _constraint_name(exc_info) == "ck_bundles_titel_nicht_leer"
+
+
+async def test_bundle_mit_titel_aus_umschliessendem_nbsp_und_echtem_inhalt_wird_gespeichert(
+    session,
+):
+    """Gegenprobe zum NBSP-Fall oben: btrim() darf nur die Raender abschneiden.
+
+    Ein Titel wie " Zagreb " (NBSP an beiden Enden, echter Inhalt dazwischen)
+    muss weiterhin durchgehen - sonst waere der Constraint schlicht zu streng
+    geworden, was schlimmer waere als die Luecke, die er schliesst.
+    """
+    session.add(Bundle(slug="orange-fisch-schwimmt", titel="\u00a0Zagreb\u00a0"))
+    await session.flush()
 
 
 @pytest.mark.parametrize("leerer_wert", ["", "   "], ids=["leerstring", "nur_leerzeichen"])
@@ -406,6 +435,28 @@ async def test_zu_lange_beschreibung_wird_abgelehnt(session):
     assert _constraint_name(exc_info) == "ck_bundles_beschreibung_max_laenge"
 
 
+@pytest.mark.parametrize("leerer_wert", ["", "   "], ids=["leerstring", "nur_leerzeichen"])
+async def test_bundle_mit_leerer_beschreibung_wird_abgelehnt(session, leerer_wert):
+    """beschreibung war die einzige optionale Textspalte ohne Leerstring-Schutz.
+
+    erklaerung bei Karte hat diesen Schutz schon ("IS NULL OR ..."), siehe
+    ck_karten_erklaerung_nicht_leer oben - beschreibung zieht hier nach,
+    damit eine gesetzte, aber inhaltslose Beschreibung nicht mehr durchgeht.
+    """
+    session.add(
+        Bundle(slug="lila-frosch-huepft", titel="Test", beschreibung=leerer_wert)
+    )
+    with pytest.raises(IntegrityError) as exc_info:
+        await session.flush()
+    assert _constraint_name(exc_info) == "ck_bundles_beschreibung_nicht_leer"
+
+
+async def test_bundle_ohne_beschreibung_laesst_sich_weiterhin_speichern(session):
+    """Gegenprobe: beschreibung bleibt optional, NULL ist weiterhin erlaubt."""
+    session.add(Bundle(slug="tuerkise-schnecke-kriecht", titel="Test"))
+    await session.flush()
+
+
 async def test_zu_langer_titel_wird_abgelehnt(session):
     session.add(Bundle(slug="graue-maus-pfeift", titel="a" * 201))
     with pytest.raises(IntegrityError) as exc_info:
@@ -432,6 +483,10 @@ async def test_zu_lange_klasse_wird_abgelehnt(session):
         pytest.param([None, None], id="null"),
         pytest.param([{"a": 1}, {"b": 2}], id="objekte"),
         pytest.param(["Zagreb", 42], id="gemischt_text_und_zahl"),
+        pytest.param(
+            [["Zagreb"], ["Berlin"]], id="verschachtelte_liste_beide_ebenen"
+        ),
+        pytest.param([["a"], "b"], id="verschachtelte_liste_teilweise"),
     ],
 )
 async def test_antworten_die_keine_texte_sind_werden_abgelehnt(session, antworten):
@@ -442,6 +497,15 @@ async def test_antworten_die_keine_texte_sind_werden_abgelehnt(session, antworte
     sucht den Text der richtigen Antwort in dieser Liste, um richtige_index zu
     bestimmen - auf Nicht-Strings bricht das ab oder liefert stillschweigend
     Unsinn.
+
+    Die beiden verschachtelten Faelle sind ein zweiter, eigenstaendiger Fund:
+    Vor "strict" im Pfadausdruck (siehe app/models.py) lief
+    jsonb_path_query_array() im lax-Modus, und dort packt $[*] ein
+    verschachteltes Array eine Ebene tief aus, bevor der Typfilter greift.
+    [["Zagreb"], ["Berlin"]] lieferte damit zwei Strings ("Zagreb", "Berlin"),
+    genauso viele wie insgesamt Elemente - der Constraint hielt trotz
+    verschachtelter Liste. Gegen PostgreSQL nachgemessen: Mit "strict"
+    liefern beide Faelle hier korrekt 0 gueltige Strings und werden abgelehnt.
 
     Der Insert laeuft bewusst ueber SQLAlchemy Core (insert(Karte.__table__))
     statt ueber Karte(...): Nur so ist belegt, dass die Ablehnung wirklich

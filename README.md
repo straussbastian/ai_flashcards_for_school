@@ -78,6 +78,19 @@ angefasst werden. Anzupassen ist nur `DATABASE_URL`: Der Beispielwert dort
 beschreibt den Betrieb – Datenbank im selben Container, Port 5432 –, für die
 Entwicklung zeigt sie auf `localhost:55432` mit dem Passwort `entwicklung`.
 
+**Ältere lokale Datenbank vorhanden?** Migrationen wurden zwischenzeitlich
+fortlaufend nummeriert (`0001` statt eines Hash-Namens). Steht in einer
+bestehenden lokalen Datenbank noch `alembic_version = 'ccc906f048c0'`, meldet
+`alembic upgrade head` „Can't locate revision identified by
+'ccc906f048c0'“. Es gibt dafür keine Migration – die Datenbank muss einmalig
+neu angelegt werden:
+
+```bash
+docker compose -f compose.dev.yml down -v   # wirft auch die Testdatenbank weg
+docker compose -f compose.dev.yml up -d
+uv run alembic upgrade head
+```
+
 Tests (die Testdatenbank wird einmalig angelegt):
 
 ```bash

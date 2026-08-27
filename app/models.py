@@ -48,6 +48,24 @@ MAX_TITEL_LAENGE = 200
 # Klassenbezeichnung wie "Fachinformatiker Systemintegration 23b" bequem.
 MAX_KLASSE_LAENGE = 60
 
+# --- Leerraum, den die Datenbank wie Python behandeln muss -----------------
+# btrim(x) ohne zweites Argument trimmt ausschliesslich das ASCII-Leerzeichen
+# U+0020. Pythons str.strip() (und damit jede Eingabepruefung im
+# Anwendungscode) behandelt daneben auch Tab/Zeilenumbruch/Wagenruecklauf und
+# das geschuetzte Leerzeichen U+00A0 (NBSP) als Leerraum - ein Titel oder eine
+# Antwort aus einem einzelnen NBSP (" ") ging deshalb bislang durch jeden
+# *_nicht_leer-Constraint hindurch. Diese Liste deckt das ASCII-Leerraum-
+# Alphabet (Space, Tab, LF, CR, VT, FF) sowie das eine konkret gefundene
+# Nicht-ASCII-Zeichen (NBSP) ab - nicht Pythons vollstaendige
+# Unicode-Leerraumtabelle (z.B. Em Space U+2003, Ideographic Space U+3000).
+# PostgreSQL hat dafuer keine eingebaute Entsprechung zu str.isspace(); eine
+# vollstaendige Nachbildung waere fuer den hier gefundenen Fall
+# unverhaeltnismaessig. Taucht ein weiteres solches Zeichen auf, laesst es
+# sich hier auf dieselbe Weise ergaenzen.
+# Als SQL-Ausdruck statt als literale Zeichen im Quelltext, damit kein
+# unsichtbares Zeichen (das NBSP selbst) im Quellcode steht.
+_LEERRAUM_SQL = "' ' || chr(9) || chr(10) || chr(13) || chr(11) || chr(12) || chr(160)"
+
 # --- Warum CHECK und nicht VARCHAR(n) ---------------------------------------
 # Die Laengengrenzen der Inhaltsspalten stehen als CHECK-Constraint da und
 # nicht als VARCHAR(n). Eine ueberlange Eingabe soll denselben Fehlertyp
@@ -115,16 +133,19 @@ class Bundle(Base):
         ),
         # NOT NULL allein liesse einen Leerstring oder reine Leerzeichen
         # durch (IS NOT NULL ist damit erfuellt). btrim() entfernt
-        # fuehrende/folgende Leerzeichen; length(...) > 0 lehnt damit sowohl
-        # "" als auch "   " ab. btrim()/length() werfen fuer keinen
-        # Text-Wert einen Fehler (anders als z.B. jsonb_array_length() bei
-        # falschem JSONB-Typ, siehe Karte unten) - eine einfache Bedingung
-        # genuegt hier, ohne CASE WHEN.
+        # fuehrende/folgende Leerzeichen (siehe _LEERRAUM_SQL oben fuer die
+        # Zeichen, die dabei mitzaehlen); length(...) > 0 lehnt damit "",
+        # "   " und ein einzelnes NBSP gleichermassen ab. btrim()/length()
+        # werfen fuer keinen Text-Wert einen Fehler (anders als z.B.
+        # jsonb_array_length() bei falschem JSONB-Typ, siehe Karte unten) -
+        # eine einfache Bedingung genuegt hier, ohne CASE WHEN.
         CheckConstraint(
-            "length(btrim(titel)) > 0", name="ck_bundles_titel_nicht_leer"
+            f"length(btrim(titel, {_LEERRAUM_SQL})) > 0",
+            name="ck_bundles_titel_nicht_leer",
         ),
         CheckConstraint(
-            "length(btrim(slug)) > 0", name="ck_bundles_slug_nicht_leer"
+            f"length(btrim(slug, {_LEERRAUM_SQL})) > 0",
+            name="ck_bundles_slug_nicht_leer",
         ),
         # Laengengrenzen, siehe Kommentarblock oben.
         CheckConstraint(
@@ -135,6 +156,15 @@ class Bundle(Base):
         CheckConstraint(
             f"length(beschreibung) <= {MAX_MARKDOWN_LAENGE}",
             name="ck_bundles_beschreibung_max_laenge",
+        ),
+        # beschreibung ist optional (anders als titel/slug), deshalb "IS
+        # NULL OR ...", in derselben Machart wie erklaerung bei Karte unten:
+        # optional, aber wenn gesetzt, dann mit sichtbarem Inhalt. Eine
+        # Beschreibung aus lauter Leerzeichen erzeugte auf der Startseite des
+        # Bundles einen leeren Absatz, den niemand gewollt hat.
+        CheckConstraint(
+            f"beschreibung IS NULL OR length(btrim(beschreibung, {_LEERRAUM_SQL})) > 0",
+            name="ck_bundles_beschreibung_nicht_leer",
         ),
         CheckConstraint(
             f"length(klasse) <= {MAX_KLASSE_LAENGE}",
@@ -198,9 +228,10 @@ class Karte(Base):
         CheckConstraint("art IN ('flashcard', 'frage')", name="ck_karten_art"),
         CheckConstraint("position >= 0", name="ck_karten_position_nicht_negativ"),
         # Siehe Bundle oben: NOT NULL allein reicht nicht, um einen
-        # Leerstring abzulehnen.
+        # Leerstring abzulehnen. _LEERRAUM_SQL siehe Kommentarblock oben.
         CheckConstraint(
-            "length(btrim(vorderseite)) > 0", name="ck_karten_vorderseite_nicht_leer"
+            f"length(btrim(vorderseite, {_LEERRAUM_SQL})) > 0",
+            name="ck_karten_vorderseite_nicht_leer",
         ),
         # rueckseite ist bei einer Frage NULL (erlaubt) und bei einer
         # Flashcard Pflicht (siehe ck_karten_felder_passen_zur_art unten).
@@ -209,14 +240,14 @@ class Karte(Base):
         # unabhaengigen ersten Zweig (kein typwechselnder Funktionsaufruf
         # wie bei den JSONB-Checks) ist hier unproblematisch.
         CheckConstraint(
-            "rueckseite IS NULL OR length(btrim(rueckseite)) > 0",
+            f"rueckseite IS NULL OR length(btrim(rueckseite, {_LEERRAUM_SQL})) > 0",
             name="ck_karten_rueckseite_nicht_leer",
         ),
         # erklaerung in derselben Machart: optional, aber wenn gesetzt, dann
         # mit Inhalt. Eine Erklaerung aus lauter Leerzeichen erzeugt auf der
         # Rueckseite einen leeren Absatz, den niemand gewollt hat.
         CheckConstraint(
-            "erklaerung IS NULL OR length(btrim(erklaerung)) > 0",
+            f"erklaerung IS NULL OR length(btrim(erklaerung, {_LEERRAUM_SQL})) > 0",
             name="ck_karten_erklaerung_nicht_leer",
         ),
         # Laengengrenzen, siehe Kommentarblock oben. Alle drei Spalten sind
@@ -287,6 +318,18 @@ class Karte(Base):
         # auf die der Pfadausdruck passt - hier alle vom Typ String. Sind
         # das genauso viele wie insgesamt, ist jedes Element ein String.
         # Der CASE-WHEN-Rahmen wie oben, aus demselben Grund.
+        #
+        # "strict" vor dem Pfad ist Pflicht, kein Stil: Ohne dieses Schluessel-
+        # wort laeuft $[*] im Default-Modus "lax", und lax packt ein
+        # verschachteltes Array wie [["Zagreb"], ["Berlin"]] eine Ebene tief
+        # aus, bevor der Filter greift - jsonb_path_query_array() liefert
+        # dann ["Zagreb", "Berlin"], zwei Strings, genauso viele wie
+        # insgesamt Elemente da sind, und der Constraint haelt trotz
+        # verschachtelter Liste. Mit "strict" wertet der Filter jedes
+        # Element von $[*] so aus, wie es dasteht, ohne Auspacken - ein
+        # geschachteltes Array ist dort kein String und faellt durch den
+        # Filter. Gegen PostgreSQL 17 nachgemessen fuer
+        # [["Zagreb"], ["Berlin"]] und [["a"], "b"].
         CheckConstraint(
             """
             CASE
@@ -294,7 +337,7 @@ class Karte(Base):
                 WHEN jsonb_typeof(antworten) = 'array'
                     THEN jsonb_array_length(antworten) = jsonb_array_length(
                         jsonb_path_query_array(
-                            antworten, '$[*] ? (@.type() == "string")'))
+                            antworten, 'strict $[*] ? (@.type() == "string")'))
                 ELSE false
             END
             """,
@@ -310,6 +353,23 @@ class Karte(Base):
         # damit der gemeldete Constraint-Name eindeutig sagt, was los ist -
         # PostgreSQL garantiert keine Reihenfolge, in der Constraints
         # geprueft werden.
+        #
+        # "strict" aus demselben Grund wie bei ck_karten_antworten_sind_texte
+        # oben: Ohne das Schluesselwort wuerde $[*] im lax-Modus ein
+        # verschachteltes Array wie [["   "]] eine Ebene tief auspacken und
+        # den inneren Leerstring pruefen, statt das aeussere (Nicht-String-)
+        # Element korrekt durchfallen zu lassen - mit demselben Risiko einer
+        # unbeabsichtigten Fehlermeldung wie dort.
+        #
+        # [^[:space:]<NBSP>] statt nur [^[:space:]]: Die POSIX-Klasse
+        # [:space:] kennt kein NBSP (U+00A0), das Pythons str.strip() sehr
+        # wohl als Leerraum behandelt (siehe _LEERRAUM_SQL oben) - eine
+        # Antwort aus einem einzelnen NBSP ging deshalb bislang durch. Das
+        # Zeichen selbst steht nicht als Escape im String (jsonpath-
+        # like_regex kennt kein \\u-Escape), sondern wird per chr(160) an den
+        # Pfadausdruck angehaengt und dieser dynamisch zu jsonpath gecastet -
+        # chr() und der Cast text->jsonpath sind beide immutable, also in
+        # einem CHECK zulaessig (gegen PostgreSQL 17 nachgemessen).
         CheckConstraint(
             """
             CASE
@@ -317,8 +377,9 @@ class Karte(Base):
                 WHEN jsonb_typeof(antworten) = 'array'
                     THEN NOT jsonb_path_exists(
                         antworten,
-                        '$[*] ? (@.type() == "string"'
-                        ' && !(@ like_regex "[^[:space:]]"))')
+                        ('strict $[*] ? (@.type() == "string"'
+                         ' && !(@ like_regex "[^[:space:]' || chr(160) || ']"))'
+                        )::jsonpath)
                 ELSE false
             END
             """,
