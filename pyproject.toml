@@ -12,6 +12,13 @@ dependencies = [
     "pydantic-settings>=2.7",
     "jinja2>=3.1",
     "markdown-it-py>=3.0",
+    # Das offizielle MCP-SDK. Untergrenze 2.1: Erst ab 2.x heisst die Klasse
+    # MCPServer (mcp.server.mcpserver) und liefert streamable_http_app() eine
+    # Starlette-App, die sich als ASGI-Anwendung einhaengen laesst. Obergrenze
+    # 3: Ein Hauptversionssprung hat dieses SDK bereits einmal komplett
+    # umbenannt (mcp.server.fastmcp wirft heute einen ModuleNotFoundError mit
+    # Migrationshinweis) - das soll die CI melden und nicht der Betrieb.
+    "mcp>=2.1,<3",
     "nh3>=0.2.20",
 ]
 

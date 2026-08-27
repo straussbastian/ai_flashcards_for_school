@@ -1,5 +1,6 @@
 import os
 from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 
 import httpx2
 import pytest
@@ -116,3 +117,51 @@ async def klient(datenbank_override: None) -> AsyncGenerator[httpx2.AsyncClient,
     transport = httpx2.ASGITransport(app=app)
     async with httpx2.AsyncClient(transport=transport, base_url="http://test") as instanz:
         yield instanz
+
+
+@pytest.fixture(autouse=True)
+def sitzungsquelle_gesperrt():
+    """Sperrt die Sitzungsquelle aus app/sitzung.py fuer JEDEN Test.
+
+    Ohne diese Sperre wuerde ein MCP-Test, der die Fixture "mcp_sitzung"
+    vergisst, still die Entwicklungsdatenbank (DATABASE_URL) treffen und
+    gruen werden. Der Override in "datenbank_override" kann das nicht
+    verhindern: Er ist ein Eintrag in app.dependency_overrides und greift
+    ausschliesslich fuer FastAPI-Abhaengigkeiten - der MCP-Endpunkt ist
+    keine.
+
+    autouse und ohne Datenbankbezug: Die Sperre braucht kein PostgreSQL und
+    darf deshalb auch in Tests gelten, die gar keine Datenbank anfassen.
+    """
+    from app.sitzung import KeineSitzungsquelle, quelle_setzen, quelle_zuruecksetzen
+
+    @asynccontextmanager
+    async def gesperrt():
+        raise KeineSitzungsquelle(
+            "Es ist keine Sitzungsquelle gesetzt. In Tests fordert man dafuer "
+            "die Fixture 'mcp_sitzung' an (siehe tests/conftest.py)."
+        )
+        yield  # pragma: no cover -- macht die Funktion zum Generator
+
+    quelle_setzen(gesperrt)
+    yield
+    quelle_zuruecksetzen()
+
+
+@pytest.fixture
+def mcp_sitzung(session: AsyncSession, sitzungsquelle_gesperrt: None) -> AsyncSession:
+    """Biegt app.sitzung.sitzung() auf die Testsession um.
+
+    Jeder Test, der MCP-Werkzeuge oder den Token-Pruefer aufruft, fordert
+    diese Fixture an und bekommt damit dieselbe Session wie die
+    HTTP-Anfragen ueber "client"/"klient" - eine Transaktion, ein
+    Rollback am Ende.
+    """
+    from app.sitzung import quelle_setzen
+
+    @asynccontextmanager
+    async def testquelle():
+        yield session
+
+    quelle_setzen(testquelle)
+    return session
