@@ -3,6 +3,7 @@ from collections.abc import AsyncGenerator
 
 import pytest
 import pytest_asyncio
+from fastapi.testclient import TestClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.db import Base, get_session
@@ -51,12 +52,24 @@ async def session(test_engine) -> AsyncGenerator[AsyncSession, None]:
 async def datenbank_override(session: AsyncSession) -> AsyncGenerator[None, None]:
     """Ueberschreibt die App-Abhaengigkeit get_session mit der Testsession.
 
-    Ohne diesen Override wuerden Tests, die den TestClient benutzen, ueber
-    Depends(get_session) die echte Entwicklungsdatenbank (DATABASE_URL)
-    treffen statt der Testdatenbank. Wird explizit von den Tests angefordert,
-    die ihn brauchen (siehe tests/test_main.py), und raeumt sich danach
-    selbst wieder ab.
+    Ohne diesen Override wuerden Anfragen ueber Depends(get_session) die
+    echte Entwicklungsdatenbank (DATABASE_URL) treffen statt der
+    Testdatenbank. Wird nicht direkt von Tests angefordert, sondern von der
+    Fixture "client" unten - so ist die Absicherung an den TestClient
+    gekoppelt statt an das Erinnerungsvermoegen einzelner Testdateien.
+    Raeumt sich danach selbst wieder ab.
     """
     app.dependency_overrides[get_session] = lambda: session
     yield
     del app.dependency_overrides[get_session]
+
+
+@pytest.fixture
+def client(datenbank_override: None) -> TestClient:
+    """Ein TestClient, dessen Datenbank-Abhaengigkeit zwangslaeufig die Testsession benutzt.
+
+    Jeder Test, der einen Client braucht, fordert diese Fixture an und
+    bekommt den Override automatisch mit - ohne dass die einzelne Testdatei
+    selbst daran denken muss (Sicherheitsgarantie statt Opt-in).
+    """
+    return TestClient(app)
