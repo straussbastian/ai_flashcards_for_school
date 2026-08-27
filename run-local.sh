@@ -16,7 +16,25 @@ DATEN="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/daten"
 mkdir -p "$DATEN"
 
 docker build -t flashcards .
-docker rm -f "$NAME" 2>/dev/null || true
+
+# Den alten Container geordnet beenden statt hart abschiessen. Bei einem
+# SIGKILL (docker rm -f) kommt PostgreSQL nicht mehr dazu, seine Sperrdatei
+# postmaster.pid zu entfernen; der naechste Start muss sie dann erst
+# aufraeumen (docker/entrypoint.sh tut das). Sauberer ist, sie gar nicht
+# erst entstehen zu lassen: Mit SIGTERM faehrt PostgreSQL mit einem
+# Abschluss-Checkpoint herunter, statt beim naechsten Start per
+# Crash-Recovery aus dem WAL hochzukommen.
+#
+# Die Frist gehoert zu docker/supervisord.conf: Dort hat postgres
+# stopwaitsecs=30 fuer diesen Checkpoint und app stopwaitsecs=5, und
+# supervisord beendet die Programme nacheinander. 45 Sekunden lassen dafuer
+# Luft. Wird die Frist ueberschritten, schickt Docker doch noch SIGKILL -
+# das bleibt folgenlos, weil der naechste Start die Sperrdatei wegraeumt.
+if docker inspect "$NAME" >/dev/null 2>&1; then
+    echo "Beende den laufenden Container geordnet (Frist: 45 Sekunden) ..."
+    docker stop -t 45 "$NAME" >/dev/null || true
+    docker rm -f "$NAME" >/dev/null 2>&1 || true
+fi
 
 docker run -d --name "$NAME" \
     -v "$DATEN:/data" \
@@ -30,4 +48,4 @@ docker run -d --name "$NAME" \
 
 echo "Container laeuft. Logs: docker logs -f $NAME"
 echo "Pruefen:                 curl -s http://localhost:8000/healthz"
-echo "Stoppen:                 docker rm -f $NAME"
+echo "Stoppen (geordnet):      docker stop -t 45 $NAME && docker rm $NAME"

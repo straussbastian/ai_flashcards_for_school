@@ -52,8 +52,17 @@ curl -s http://localhost:8000/healthz
 ```
 
 Logs mitlesen mit `docker logs -f flashcards-lokal`, stoppen mit
-`docker rm -f flashcards-lokal`. Das Verzeichnis `./daten` bleibt liegen –
-beim nächsten Start ist alles wieder da.
+`docker stop -t 45 flashcards-lokal && docker rm flashcards-lokal`. Das
+Verzeichnis `./daten` bleibt liegen – beim nächsten Start ist alles wieder da.
+
+Die Frist von 45 Sekunden gibt PostgreSQL Zeit, mit einem Abschluss-Checkpoint
+herunterzufahren (siehe `stopwaitsecs` in `docker/supervisord.conf`). Ein harter
+Stopp – `docker rm -f`, ein überschrittenes Zeitlimit beim Deployment, ein
+Stromausfall – ist trotzdem verkraftbar: PostgreSQL lässt dann seine Sperrdatei
+`postmaster.pid` im Datenverzeichnis liegen, und `docker/entrypoint.sh` entfernt
+diese beim nächsten Start und schreibt eine Meldung darüber ins Log. Ohne das
+hält PostgreSQL die vermerkte Prozessnummer für einen zweiten laufenden Server
+– im frischen Container ist sie oft wieder vergeben – und verweigert den Start.
 
 Die Passwörter in `run-local.sh` sind Entwicklungspasswörter und stehen
 absichtlich im Klartext. Für den Betrieb werden die Werte in Coolify gesetzt.
