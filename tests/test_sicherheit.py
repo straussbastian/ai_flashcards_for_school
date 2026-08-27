@@ -90,3 +90,17 @@ def test_schutzkoepfe_gelten_auch_fuer_healthz(client):
     # bekommt deshalb bewusst die "client"-Fixture statt eines Overrides.
     kopf = client.get("/healthz").headers.get("content-security-policy", "")
     assert "default-src 'none'" in kopf
+
+
+def test_die_lockere_richtlinie_gilt_nur_fuer_die_zustimmungsseite():
+    """Die Ausnahme darf nicht auf die Lernseite abfaerben.
+
+    Auf der Lernseite steht der JSON-Datenblock mit Inhalten, die ueber MCP
+    hereingekommen sind. Ein Formular hat sie nicht - form-action 'none'
+    bleibt dort die richtige Angabe.
+    """
+    from app.sicherheit import RICHTLINIE, ZUSTIMMUNG_RICHTLINIE
+
+    assert "form-action 'none'" in RICHTLINIE
+    assert "claude.ai" not in RICHTLINIE
+    assert "form-action 'none'" not in ZUSTIMMUNG_RICHTLINIE

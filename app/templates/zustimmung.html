@@ -1,0 +1,22 @@
+{% extends "basis.html" %}
+{% block titel %}Zugriff auf deine Lernseiten{% endblock %}
+{% block kopf %}<link rel="stylesheet" href="/static/zustimmung.css">{% endblock %}
+{% block inhalt %}
+<main class="zustimmung">
+  <h1>Möchtest du Claude Zugriff auf deine Lernseiten geben?</h1>
+  <p class="erklaerung">
+    Claude kann dann Lernpakete anlegen, ändern und deaktivieren. Lernende
+    sehen davon nichts – sie bekommen nur die Links, die du weitergibst.
+  </p>
+  {% if fehler %}<p class="fehler" role="alert">{{ fehler }}</p>{% endif %}
+  <form method="post" action="/oauth/authorize">
+    {% for name, wert in verborgen.items() %}
+    <input type="hidden" name="{{ name }}" value="{{ wert }}">
+    {% endfor %}
+    <label for="passwort">Dein Passwort</label>
+    <input type="password" id="passwort" name="passwort" autocomplete="current-password"
+           autofocus required>
+    <button type="submit">Zugriff geben</button>
+  </form>
+</main>
+{% endblock %}
