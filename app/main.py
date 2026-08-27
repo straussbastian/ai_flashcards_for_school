@@ -1,15 +1,39 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Request
 from fastapi.exception_handlers import http_exception_handler as _standard_http_exception_handler
 from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.routing import Route
 
+from app.mcp import MCPWeiche, mcp_bauen
+from app.oauth.metadaten import MCP_PFAD
 from app.routen import lernseite, oauth, system
 from app.routen.lernseite import _nicht_gefunden
 from app.sicherheit import Schutzkoepfe
 from app.templates import VERZEICHNIS
 
-app = FastAPI(title="Flashcards", docs_url=None, redoc_url=None, openapi_url=None)
+
+@asynccontextmanager
+async def lebenslauf(app: FastAPI):
+    """Betritt den Sitzungsverwalter des MCP-Servers.
+
+    Ohne das antwortet jede MCP-Anfrage mit "Task group is not initialized.
+    Make sure to use run()." - die eingehaengte Starlette-App bringt zwar
+    einen eigenen Lifespan mit, aber Starlette fuehrt den Lifespan einer
+    Unteranwendung nicht aus. Das ist die Stelle, an der so etwas gern
+    uebersehen wird.
+    """
+    server, _ = mcp_bauen()
+    async with server.session_manager.run():
+        yield
+
+
+app = FastAPI(
+    title="Flashcards", docs_url=None, redoc_url=None, openapi_url=None,
+    lifespan=lebenslauf,
+)
 
 app.add_middleware(Schutzkoepfe)
 
@@ -17,6 +41,11 @@ app.mount("/static", StaticFiles(directory=str(VERZEICHNIS.parent / "static")), 
 
 app.include_router(system.router)
 app.include_router(oauth.router)
+# Eine Route und kein Mount - die Begruendung steht im Docstring von
+# app/mcp/__init__.py. Ohne methods=... passt sie auf jede Methode; das
+# ist gewollt, weil Streamable HTTP POST, GET und DELETE benutzt.
+app.router.routes.append(Route(MCP_PFAD, endpoint=MCPWeiche()))
+
 # Muss als letzter kommen: /{slug} ist zwar durch ein Muster begrenzt, aber
 # eine spaetere Route mit gleicher Form wuerde sonst verdeckt.
 app.include_router(lernseite.router)

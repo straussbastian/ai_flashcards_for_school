@@ -1,3 +1,4 @@
+import asyncio
 import os
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
@@ -197,3 +198,51 @@ def konfiguration(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("TEACHER_PASSWORD", TEST_LEHRERINNEN_PASSWORT)
     yield
     get_settings.cache_clear()
+
+
+@pytest_asyncio.fixture
+async def mcp_laeuft():
+    """Baut pro Test einen frischen MCP-Server und betritt seinen Sitzungsverwalter.
+
+    Zwei Gruende fuer "pro Test frisch":
+
+    1. StreamableHTTPSessionManager.run() laesst sich GENAU EINMAL pro
+       Instanz betreten - das Flag _has_started wird nie zurueckgesetzt.
+       Eine geteilte Instanz waere nach dem ersten Test verbraucht.
+    2. app/main.py fuehrt run() in seinem Lifespan aus. Die Fixture "klient"
+       benutzt httpx2.ASGITransport, und die fuehrt keinen Lifespan aus
+       (siehe den Hinweis im Docstring von "klient"). Ohne diese Fixture
+       antwortete jede MCP-Anfrage mit "Task group is not initialized".
+
+    Nur anfordern, wenn ein Test tatsaechlich einen MCP-Handschlag fuehrt.
+    Fuer den 401 ohne Token wird sie nicht gebraucht: Die Ablehnung
+    geschieht in der Middleware davor.
+    """
+    from app.mcp import mcp_bauen
+
+    mcp_bauen.cache_clear()
+    server, _ = mcp_bauen()
+
+    # run() gehalten wird in einer eigenen Task, nicht direkt hier: Der
+    # Sitzungsverwalter oeffnet darin eine anyio-Taskgruppe, und anyio
+    # verlangt, dass ihr Gueltigkeitsbereich in DERSELBEN Task verlassen
+    # wird, in der er betreten wurde. pytest-asyncio fuehrt Aufbau und
+    # Abbau einer async-Fixture aber in zwei verschiedenen Tasks aus - ohne
+    # diesen Umweg scheitert der Abbau mit "Attempted to exit cancel scope
+    # in a different task than it was entered in". Im Betrieb macht der
+    # Lifespan in app/main.py genau dasselbe: eine Task haelt run() offen,
+    # waehrend die Anfragen in anderen Tasks laufen.
+    bereit = asyncio.Event()
+    beenden = asyncio.Event()
+
+    async def halten():
+        async with server.session_manager.run():
+            bereit.set()
+            await beenden.wait()
+
+    aufgabe = asyncio.create_task(halten())
+    await bereit.wait()
+    yield server
+    beenden.set()
+    await aufgabe
+    mcp_bauen.cache_clear()
