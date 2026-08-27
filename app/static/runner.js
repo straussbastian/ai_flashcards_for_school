@@ -18,6 +18,7 @@
      6. alsText() liest ohne innerHTML und trennt Bloecke.
      7. Die Rueckseite traegt einen Weiter-Knopf.
      8. Tastenleiste und Tastenbedienung kommen aus einer Quelle.
+     9. Beim Blaettern wandert der Fokus auf die neue Karte.
 
    Ab Nummer 6 sind es Fehlerbehebungen: Der Prototyp kannte nur eine
    Konfiguration (selbsteinschaetzung: true) und nur kurze Texte,
@@ -643,18 +644,39 @@
     $("karte").focus({ preventScroll: true });
   };
 
-  const vor = () => {
-    if (lauf.index === lauf.karten.length - 1) { zeichneErgebnis(); return; }
-    lauf.index++;
+  /* ABWEICHUNG 9: Der Prototyp ersetzte beim Blaettern den Karteninhalt,
+     ohne den Fokus mitzunehmen. Lag er auf einem Knopf der Karte, war
+     dieser Knopf nach replaceChildren fort und der Fokus landete auf
+     <body>: Tab faengt danach wieder ganz vorn an, und eine
+     Sprachausgabe verliert die Stelle. Die Spec fordert beides
+     ausdruecklich - "Fokus wandert beim Kartenwechsel auf die neue
+     Karte" und "Der Tastaturfokus darf nie verloren gehen".
+
+     antworten() macht es schon richtig und setzt den Fokus auf die Karte
+     (die dafuer tabindex="-1" traegt); hier ist es nachgezogen.
+
+     Nur wenn der Fokus wirklich in der Karte lag - oder nirgends -
+     wandert er mit. Stand er auf einem der Navigationsbalken unten,
+     bleibt er dort: Die werden nicht ersetzt, und ihn wegzunehmen waere
+     am Handy ein Rueckschritt, wo genau diese Balken das Bedienelement
+     zum Weiterblaettern sind. */
+  const blaettern = (schritt) => {
+    const aktiv = document.activeElement;
+    const fokusInDerKarte = !aktiv || aktiv === document.body || $("karte").contains(aktiv);
+    lauf.index += schritt;
     zeichneKarte(false);
     ansagen(`Karte ${lauf.index + 1} von ${lauf.karten.length}.`);
+    if (fokusInDerKarte) $("karte").focus({ preventScroll: true });
+  };
+
+  const vor = () => {
+    if (lauf.index === lauf.karten.length - 1) { zeichneErgebnis(); return; }
+    blaettern(1);
   };
 
   const zurueck = () => {
     if (lauf.index === 0) return;
-    lauf.index--;
-    zeichneKarte(false);
-    ansagen(`Karte ${lauf.index + 1} von ${lauf.karten.length}.`);
+    blaettern(-1);
   };
 
   /* ================== Bedienung ================== */
