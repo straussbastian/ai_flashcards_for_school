@@ -120,8 +120,8 @@ FastAPI, SQLAlchemy 2, Alembic, psycopg 3, Jinja2, das offizielle `mcp`-SDK, `ma
 | `art` | text, not null | `flashcard` oder `frage` |
 | `vorderseite` | text, not null | Markdown. Bei `frage` die Frage |
 | `rueckseite` | text | Markdown, nur bei `flashcard` |
-| `antworten` | jsonb | nur bei `frage`: `[{"key":"A","text":"…"}, …]`, zwei bis vier Einträge |
-| `richtige_antwort` | text | nur bei `frage`: `A`–`D` |
+| `antworten` | jsonb | nur bei `frage`: Textliste `["Split", "Zagreb", …]`, zwei bis vier Einträge |
+| `richtige_index` | int | nur bei `frage`: Position der richtigen Antwort in `antworten`, nullbasiert |
 | `erklaerung` | text | optional, Markdown, wird auf der Rückseite gezeigt |
 | `erstellt_am`, `geaendert_am` | timestamptz | |
 
@@ -131,11 +131,13 @@ FastAPI, SQLAlchemy 2, Alembic, psycopg 3, Jinja2, das offizielle `mcp`-SDK, `ma
 
 Falsche Daten dürfen gar nicht erst hineinkommen – nicht nur die Anwendung prüft:
 
-- `art = 'flashcard'` → `rueckseite` gesetzt, `antworten`, `richtige_antwort`, `erklaerung` leer
-- `art = 'frage'` → `antworten` und `richtige_antwort` gesetzt, `rueckseite` leer
-- `richtige_antwort` muss als `key` in `antworten` vorkommen
-- `antworten` enthält zwei bis vier Einträge mit eindeutigen Keys aus `A`–`D`
+- `art = 'flashcard'` → `rueckseite` gesetzt, `antworten`, `richtige_index`, `erklaerung` leer
+- `art = 'frage'` → `antworten` und `richtige_index` gesetzt, `rueckseite` leer
+- `antworten` ist ein JSON-Array mit zwei bis vier Einträgen
+- `richtige_index` liegt zwischen 0 und `länge(antworten) - 1`
 - `reihenfolge` in (`zufall`, `fest`)
+
+**Warum ein Index und kein Buchstabe:** Die Antwortreihenfolge wird bei jedem Durchlauf neu gemischt. Die Buchstaben A–D vergibt erst der Browser nach dem Mischen – ein in der Datenbank gespeicherter Buchstabe wäre nach dem ersten Mischen falsch. Gespeichert wird deshalb die Position, angezeigt wird der Buchstabe.
 
 ### Slug-Erzeugung
 
@@ -193,7 +195,7 @@ Eine Karte im Eingabeformat:
 }
 ```
 
-Der Agent gibt die richtige Antwort als **Text** an, nicht als Buchstaben – die Buchstaben vergibt der Server. Das verhindert die häufigste Fehlerquelle, nämlich verrutschte Zuordnungen. Passt der Text auf keine Antwortmöglichkeit, kommt eine Klartextmeldung zurück.
+Der Agent gibt die richtige Antwort als **Text** an, nicht als Buchstaben. Der Server sucht den Text in `antworten` und speichert dessen Position als `richtige_index`. Das verhindert die häufigste Fehlerquelle, nämlich verrutschte Zuordnungen. Passt der Text auf keine Antwortmöglichkeit, kommt eine Klartextmeldung zurück; kommt er mehrfach vor, ebenfalls.
 
 Für Flashcards entsprechend `"art": "flashcard"` mit `vorderseite` und `rueckseite`.
 
@@ -230,7 +232,7 @@ Beim Start und bei jedem Neustart werden **Karten und Antwortreihenfolge frisch 
 
 **Flashcard:** Klick oder Leertaste dreht die Karte. Ist `selbsteinschaetzung` aktiv, erscheinen auf der Rückseite „Wusste ich" und „Wusste ich nicht"; das Ergebnis zählt mit. Sonst nur „Weiter".
 
-**Frage:** Auswahl per Klick oder Taste A–D. Die Karte dreht sich und zeigt „Richtig!" oder „Leider falsch", darunter die eigene Antwort, die richtige Lösung und – falls vorhanden – die Erklärung.
+**Frage:** Die Buchstaben A–D werden **nach** dem Mischen vergeben, also der Reihe nach von oben. Auswahl per Klick oder Taste A–D. Die Karte dreht sich und zeigt „Richtig!" oder „Leider falsch", darunter die eigene Antwort, die richtige Lösung und – falls vorhanden – die Erklärung.
 
 **Steuerung:** `A`–`D` wählen, Leertaste umdrehen, `←`/`→` blättern, `Esc` beenden. Am Handy zwei breite Balken unten, kein Wischen. Bereits beantwortete Karten behalten beim Zurückblättern ihr Ergebnis; eine Antwort kann nicht nachträglich geändert werden.
 
@@ -295,7 +297,7 @@ Lange Fragen scrollen innerhalb der Karte, die Seite selbst scrollt nie waagerec
 
 - MCP-Werkzeuge einzeln: Anlegen, Auflisten, Ändern, Löschen, Deaktivieren
 - Datenbank-Constraints: kaputte Karten lassen sich nicht speichern
-- Zuordnung `richtige_antwort` als Text → Buchstabe, inklusive Fehlerfall
+- Zuordnung `richtige_antwort` als Text → `richtige_index`, inklusive der Fehlerfälle „Text kommt nicht vor" und „Text kommt mehrfach vor"
 - Slug-Erzeugung inklusive Kollision
 - OAuth vollständig: 401-Handshake, Discovery, Registrierung, Autorisierung mit richtigem und falschem Passwort, Token, Refresh mit Rotation, abgelaufener Token
 - Markdown-Rendering: erlaubtes Markdown kommt durch, eingeschleuste Skripte werden entfernt
@@ -311,7 +313,17 @@ Lange Fragen scrollen innerhalb der Karte, die Seite selbst scrollt nie waagerec
 - Handy-Viewport: Balken bedienbar, kein waagerechtes Scrollen
 - Neu laden setzt alles zurück
 
-## 9. Deployment auf Coolify
+## 9. Betrieb
+
+### Zuerst lokal
+
+Entwickelt und abgenommen wird auf dem eigenen Rechner: Image bauen, Container mit einem lokalen Verzeichnis als `/data`-Volume starten, gegen `http://localhost:8000` prüfen. Erst wenn das trägt, kommt der Server dazu.
+
+Weil Cowork MCP-Server aus Anthropics Cloud erreicht und nicht vom Rechner der Lehrkraft, ist ein lokaler Container von dort nicht erreichbar. Der OAuth-Ablauf wird deshalb lokal über Tests geprüft; für einen Praxistest mit echtem Cowork braucht es einen Tunnel (`cloudflared`) oder das Server-Deployment.
+
+### Später auf Coolify
+
+Coolify zieht sich das Repository eigenständig per CI/CD. Einzurichten ist dort:
 
 1. Anwendung aus dem Git-Repo anlegen, Dockerfile-Build
 2. **Persistentes Volume auf `/data`** – ohne das startet der Container bewusst nicht
