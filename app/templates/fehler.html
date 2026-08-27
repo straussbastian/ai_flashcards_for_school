@@ -1,0 +1,17 @@
+{% extends "basis.html" %}
+{% block titel %}{{ ueberschrift }}{% endblock %}
+{% block kopf %}<link rel="stylesheet" href="/static/lernseite.css">{% endblock %}
+{% block inhalt %}
+<div class="buehne">
+  <main class="mitte">
+    <div class="stapel">
+      <div class="karte"><div class="karte-innen">
+        <div class="seite">
+          <h1 class="titel">{{ ueberschrift }}</h1>
+          <p class="beschreibung">{{ text }}</p>
+        </div>
+      </div></div>
+    </div>
+  </main>
+</div>
+{% endblock %}

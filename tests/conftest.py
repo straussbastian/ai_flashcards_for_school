@@ -1,6 +1,7 @@
 import os
 from collections.abc import AsyncGenerator
 
+import httpx2
 import pytest
 import pytest_asyncio
 from fastapi.testclient import TestClient
@@ -87,3 +88,25 @@ def client(datenbank_override: None) -> TestClient:
     selbst daran denken muss (Sicherheitsgarantie statt Opt-in).
     """
     return TestClient(app)
+
+
+@pytest_asyncio.fixture
+async def klient(datenbank_override: None) -> AsyncGenerator[httpx2.AsyncClient, None]:
+    """Asynchrones Gegenstueck zu "client", fuer async-def-Tests.
+
+    Der synchrone TestClient (siehe "client" oben) fuehrt die App in einem
+    eigenen Thread mit eigenem Event-Loop aus; die Testsession haengt am
+    Loop des Tests. Bei einem synchronen Test laeuft der aeussere Loop
+    waehrenddessen nicht mit, deshalb funktioniert das dort. Ein
+    async-def-Test laesst den aeusseren Loop aber mitlaufen - dann arbeiten
+    zwei Event-Loops auf derselben Datenbankverbindung, was zu sporadischen
+    Haengern fuehrt. httpx2.AsyncClient mit ASGITransport ruft die App direkt
+    im Loop des Tests auf, ganz ohne eigenen Thread, und vermeidet das.
+
+    Bekommt denselben Datenbank-Override wie "client", aus demselben Grund:
+    Die Absicherung gegen die Entwicklungsdatenbank darf nicht davon
+    abhaengen, dass eine Testdatei daran denkt.
+    """
+    transport = httpx2.ASGITransport(app=app)
+    async with httpx2.AsyncClient(transport=transport, base_url="http://test") as instanz:
+        yield instanz

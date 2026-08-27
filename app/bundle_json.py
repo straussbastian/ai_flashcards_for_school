@@ -6,10 +6,13 @@ enthalten HTML, und dieses HTML kommt ausschliesslich aus `rendern()`.
 Antworttexte, Titel und Klasse bleiben Klartext - der Browser setzt sie
 als Text ein, nicht als HTML.
 
-Optionale Felder sind immer vorhanden und tragen bei Abwesenheit einen
-leeren String (`beschreibung`, `erklaerung`, `klasse`). Das gewährleistet
-eine konsistente Prüfung im Browser: `if (bundle.klasse)`, `if (karte.erklaerung)`
-usw. funktionieren überall gleich.
+Optionale Felder sind bei der Kartenart, zu der sie gehören, immer als
+String vorhanden und tragen bei Abwesenheit einen leeren String
+(`beschreibung`, `erklaerung`, `klasse`); eine Flashcard trägt gar kein
+Erklärungsfeld, weil das Datenbank-Constraint ihr keine Erklärung erlaubt.
+Das gewährleistet eine konsistente Prüfung im Browser: `if (bundle.klasse)`,
+`if (karte.erklaerung)` usw. funktionieren überall gleich, wo das Feld
+überhaupt vorkommt.
 """
 
 from app.markdown import rendern
