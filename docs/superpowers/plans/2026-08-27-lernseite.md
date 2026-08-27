@@ -18,6 +18,7 @@
 ## Global Constraints
 
 - Python 3.13, PostgreSQL 17. Alle Bezeichner, Kommentare, Docstrings und Meldungen auf **Deutsch**; etablierte Fachbegriffe ausgenommen.
+- **Code und Kommentare in ASCII, sichtbarer Text in richtigem Deutsch.** Bezeichner, Kommentare und Commit-Nachrichten bleiben umlautfrei, weil das bei Dateinamen und Terminalausgaben Ärger spart. Alles, was ein Mensch auf der Seite liest, wird korrekt geschrieben – „über", nicht „ueber". Ein Rechtschreibfehler auf einer Schulseite ist ein Fehler, keine Konvention.
 - **Keine Cookies, kein LocalStorage, keine SessionStorage.** Neu laden heißt neu anfangen. Das gilt ausnahmslos.
 - **Nach dem ersten Seitenaufruf gibt es keine weitere Serveranfrage.** Kein Nachladen von Karten, kein Melden von Ergebnissen.
 - Der Prototyp ist die verbindliche Referenz: Wo die Umsetzung sich anders verhält, ist die Umsetzung falsch — es sei denn, jemand entscheidet ausdrücklich anders und hält das fest.
@@ -891,6 +892,54 @@ git commit -m "Screenshots und Abgleich gegen die Entwuerfe"
 ```
 
 ---
+
+---
+
+### Task 8: Landeseite und Fehlerseiten gestalten
+
+**Files:**
+- Modify: `app/templates/landeseite.html`, `app/templates/fehler.html`, `app/static/lernseite.css`
+- Test: `tests/test_seiten.py`
+
+**Interfaces:**
+- Consumes: das CSS aus Task 5
+- Produces: nichts Neues – dieselben Routen, nur ansehnlich
+
+Nachträglich aufgenommen auf Hinweis des Auftraggebers. Die Landeseite ist derzeit nacktes HTML mit einem Satz darin: Sie sieht aus wie ein Fehler, nicht wie eine Seite. Dasselbe gilt für die Fehlerseiten aus Task 3.
+
+Der Task kommt nach dem Runner, weil er dessen CSS benutzt.
+
+**Was auf die Landeseite gehört – und was nicht:** Nur der eine Hinweis, dass diese Seite über einen Link aufgerufen wird, den man von seiner Lehrkraft bekommt. Kein Projektname, keine Erklärung, kein Eingabefeld für eine Adresse. Wer hier landet, hat sich vertippt und braucht eine Richtung, keine Broschüre – und ein System, das bewusst nicht auffindbar sein soll, erklärt sich nicht selbst.
+
+- [ ] **Step 1: Schreibweise korrigieren**
+
+Sämtlicher Text, den ein Mensch auf einer Seite liest, wird in korrektem Deutsch geschrieben. In `landeseite.html` steht derzeit „ueber" statt „über"; prüf alle Templates und alle Zeichenketten, die in einer Seite landen, auf denselben Fehler. Bezeichner, Kommentare und Commit-Nachrichten bleiben umlautfrei.
+
+- [ ] **Step 2: Beide Seiten auf die Tafel stellen**
+
+Landeseite und Fehlerseiten bekommen dieselbe Optik wie die Lernseite: dunkler Hintergrund, ein Post-it mit dem Text darauf, mittig, an schmalen Schirmen ebenso brauchbar wie an breiten. Verwende die Klassen und Farbwerte, die in Task 5 aus dem Prototyp übernommen wurden – **erfinde nichts Neues.**
+
+Ein Zettel mit einem Satz darauf ist etwas anderes als ein Zettel mit zwanzig Zeilen: Prüf, dass ein sehr kurzer Inhalt nicht verloren in einer riesigen leeren Fläche steht.
+
+- [ ] **Step 3: Tests**
+
+`tests/test_seiten.py`, die auch in der CI laufen:
+
+- Die Landeseite antwortet mit 200, enthält den Hinweis in korrekter Schreibweise und bindet das Stylesheet ein
+- Sie nennt weiterhin keine Bundles – der bestehende Test dazu bleibt bestehen
+- Die 404-Seite und die 410-Seite antworten mit dem richtigen Statuscode und binden ebenfalls das Stylesheet ein
+- Kein Template enthält die Zeichenfolge `ue`, `oe` oder `ae` an einer Stelle, an der ein Umlaut stehen müsste. Ein solcher Test ist schwer allgemein zu formulieren; prüf stattdessen gezielt die bekannten Wörter, und sag im Report, wie du es gelöst hast.
+
+- [ ] **Step 4: Von Hand ansehen**
+
+Alle drei Seiten im Browser aufrufen, breit und schmal. Sie sollen als dieselbe Anwendung erkennbar sein.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add app/templates app/static tests/test_seiten.py
+git commit -m "Landeseite und Fehlerseiten gestalten"
+```
 
 ## Selbstprüfung des Plans
 
