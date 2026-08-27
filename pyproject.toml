@@ -6,7 +6,7 @@ requires-python = ">=3.13"
 dependencies = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.34",
-    "sqlalchemy>=2.0.36",
+    "sqlalchemy[asyncio]>=2.0.36",
     "psycopg[binary]>=3.2",
     "alembic>=1.14",
     "pydantic-settings>=2.7",
@@ -20,6 +20,7 @@ dev = [
     "pytest>=8.3",
     "pytest-asyncio>=0.25",
     "httpx>=0.28",
+    "httpx2>=2.12.0",
 ]
 
 [tool.pytest.ini_options]

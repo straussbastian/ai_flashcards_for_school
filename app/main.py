@@ -1,5 +1,9 @@
-from fastapi import FastAPI
-from fastapi.responses import HTMLResponse
+from fastapi import Depends, FastAPI
+from fastapi.responses import HTMLResponse, JSONResponse
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.db import get_session
 
 app = FastAPI(title="Flashcards", docs_url=None, redoc_url=None, openapi_url=None)
 
@@ -11,8 +15,14 @@ LANDESEITE = """<!doctype html>
 
 
 @app.get("/healthz")
-async def healthz() -> dict[str, str]:
-    return {"status": "ok"}
+async def healthz(session: AsyncSession = Depends(get_session)) -> JSONResponse:
+    try:
+        await session.scalar(text("SELECT 1"))
+    except Exception:
+        return JSONResponse(
+            {"status": "fehler", "datenbank": "nicht erreichbar"}, status_code=503
+        )
+    return JSONResponse({"status": "ok", "datenbank": "ok"})
 
 
 @app.get("/", response_class=HTMLResponse)
