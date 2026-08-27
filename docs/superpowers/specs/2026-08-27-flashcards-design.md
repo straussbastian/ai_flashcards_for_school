@@ -60,7 +60,9 @@ Der Container prüft das beim Start: Ist `/data` kein Mountpoint, bricht er mit 
 
 ### Backups
 
-Coolifys Datenbank-Backups greifen nicht, weil Postgres im App-Container läuft. Stattdessen: nächtlicher `pg_dump` nach `/data/backups`, sieben Generationen, ältere werden gelöscht. Liegt im selben Volume und übersteht damit Deployments.
+**Nicht Teil dieser Anwendung.** Sicherungen übernimmt Coolify auf Ebene des Volumes. Im Container läuft dafür kein eigener Prozess und liegt kein eigenes Skript — die Anwendung kümmert sich um Lernkarten, nicht um Betriebsführung.
+
+Zu wissen ist nur: Alles, was gesichert werden muss, liegt unter `/data`. Wer das Volume sichert, hat alles.
 
 ### Routen
 

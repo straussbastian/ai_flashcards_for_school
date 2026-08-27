@@ -18,7 +18,7 @@ if ! mountpoint -q /data; then
     echo "WARNUNG: /data ist kein Volume. Daten gehen beim Stoppen verloren." >&2
 fi
 
-mkdir -p /data/pgdata /data/backups
+mkdir -p /data/pgdata
 chown -R postgres:postgres /data/pgdata
 chmod 700 /data/pgdata
 
