@@ -10,6 +10,7 @@ from alembic import context
 from app.config import get_settings
 from app.db import Base
 from app import models  # noqa: F401  -- sorgt dafuer, dass die Tabellen registriert sind
+from app.oauth import modelle as oauth_modelle  # noqa: F401  -- OAuth-Tabellen registrieren
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

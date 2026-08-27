@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app import models  # noqa: F401 -- registriert die Tabellen bei Base.metadata
+from app.oauth import modelle as oauth_modelle  # noqa: F401 -- registriert die OAuth-Tabellen
 from app.db import Base, get_session
 from app.main import app
 
