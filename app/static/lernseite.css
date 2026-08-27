@@ -539,3 +539,31 @@ body::before {
   justify-content: safe center;
   align-items: safe center;
 }
+
+/* ===================== Seiten mit einem Satz ===================== */
+
+/* Der dritte Block, den der Prototyp nicht kennt. Startseite und
+   Fehlerseiten benutzen denselben Zettel wie die Lernseite, tragen
+   darauf aber einen Satz statt einer ganzen Karte.
+
+   Der Zettel ist auf Kartenlaenge ausgelegt: min-height 20rem, am
+   kleinen Schirm 17rem. Mit zwei Zeilen Text darin bleibt der groesste
+   Teil leer und der Satz klebt oben - eine Flaeche, die aussieht, als
+   fehle etwas. Deshalb hier, und nur hinter der Klasse "knapp":
+
+   min-height 0 laesst den Zettel auf seinen Inhalt schrumpfen; die
+   Polsterung von .seite (1,5rem oben, 1,3rem unten) gibt ihm den Rand,
+   den ein Zettel braucht. justify-content und align-items setzen den
+   Satz in die Mitte statt an den oberen Rand - dieselben beiden Zeilen
+   mit "safe", die schon .seite.rueckseite benutzt, und aus demselben
+   Grund: Ein ungewoehnlich langer Text darf nicht nach oben aus dem
+   Scrollbereich herauslaufen.
+
+   Keine neue Farbe, kein neuer Winkel, keine neue Zeit: Verlauf,
+   Schatten, Radius, Tinte und Breite bleiben die des Zettels. */
+.buehne.knapp .seite {
+  min-height: 0;
+  justify-content: safe center;
+  align-items: safe center;
+  text-align: center;
+}

@@ -2,7 +2,12 @@
 {% block titel %}{{ ueberschrift }}{% endblock %}
 {% block kopf %}<link rel="stylesheet" href="/static/lernseite.css">{% endblock %}
 {% block inhalt %}
-<div class="buehne">
+{# Zwei Faelle teilen sich dieses Template: 404 "Diese Lernseite gibt es
+   nicht" und 410 "Diese Lernseite ist nicht mehr aktiv"; Ueberschrift und
+   Text kommen von der Route. Bewusst zurueckhaltend: kein Klassen-Chip,
+   kein Knopf, kein Geist-Stapel. Dieselbe Anwendung wie die Lernseite,
+   aber nicht froehlicher, als der Anlass ist. #}
+<div class="buehne knapp">
   <main class="mitte">
     <div class="stapel">
       <div class="karte"><div class="karte-innen">

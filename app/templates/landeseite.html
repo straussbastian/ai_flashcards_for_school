@@ -1,4 +1,26 @@
 {% extends "basis.html" %}
+{% block kopf %}<link rel="stylesheet" href="/static/lernseite.css">{% endblock %}
 {% block inhalt %}
-<p>Diese Seite wird über einen Link aufgerufen, den du von deiner Lehrkraft bekommst.</p>
+{# Bewusst nur dieser eine Satz: kein Projektname, keine Erklaerung, kein
+   Eingabefeld fuer eine Adresse. Wer hier landet, hat sich vertippt und
+   braucht eine Richtung. Und eine Anwendung, die nicht auffindbar sein
+   soll, erklaert sich nicht selbst.
+
+   Aufbau und Klassen stammen wortgleich von der Lernseite (Buehne,
+   Stapel, Karte, Zettel), damit die Seite als dieselbe Anwendung zu
+   erkennen ist. Kein Geist-Stapel dahinter: den zeigt auch die
+   Lernseite erst waehrend eines Durchlaufs, wenn wirklich noch Karten
+   folgen. .frage ist die Klasse des fuehrenden Textes auf dem Zettel -
+   hier traegt sie den einzigen Satz der Seite. #}
+<div class="buehne knapp">
+  <main class="mitte">
+    <div class="stapel">
+      <div class="karte"><div class="karte-innen">
+        <div class="seite">
+          <p class="frage">Diese Seite wird über einen Link aufgerufen, den du von deiner Lehrkraft bekommst.</p>
+        </div>
+      </div></div>
+    </div>
+  </main>
+</div>
 {% endblock %}
