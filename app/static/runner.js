@@ -16,6 +16,7 @@
      4. reihenfolge = "fest" laesst die Kartenreihenfolge stehen.
      5. Ein Bundle ohne Karten zeigt einen Hinweis statt des Knopfes.
      6. alsText() liest ohne innerHTML und trennt Bloecke.
+     7. Die Rueckseite traegt einen Weiter-Knopf.
 
    Ab Nummer 6 sind es Fehlerbehebungen: Der Prototyp kannte nur eine
    Konfiguration (selbsteinschaetzung: true) und nur kurze Texte,
@@ -196,6 +197,35 @@
   const aktuelle = () => lauf.karten[lauf.index];
   const beantwortet = (k) => (k.art === "flashcard" ? k.gewusst !== null : k.gewaehlt !== null);
 
+  /* ABWEICHUNG 7: Was auf der Rueckseite steht, entscheiden ab hier zwei
+     Funktionen - und zwar fuer die Knoepfe und fuer die Tastenleiste
+     dieselben. Der Prototyp beantwortete diese Fragen an jeder Stelle
+     neu.
+
+     einschaetzungOffen(): Die Selbsteinschaetzung steht noch aus. Nur
+     dann gehoeren "Wusste ich" und "Wusste ich nicht" auf die
+     Rueckseite.
+
+     weiterOffen(): Die Rueckseite, die gerade zu sehen ist, fuehrt
+     weiter - bei einer beantworteten Frage und bei einer aufgedeckten
+     Lernkarte ohne offene Selbsteinschaetzung. Die Spec woertlich: "Ist
+     selbsteinschaetzung aktiv, erscheinen auf der Rueckseite 'Wusste
+     ich' und 'Wusste ich nicht'. Sonst nur 'Weiter'." Bei abgeschalteter
+     Selbsteinschaetzung bleibt gewusst fuer immer null; die alte
+     Bedingung k.gewusst !== null hat dort deshalb nie gegriffen, und die
+     Karte trug ueberhaupt keinen Knopf mehr. */
+  const einschaetzungOffen = (k) =>
+    k.art === "flashcard" && BUNDLE.selbsteinschaetzung && k.gewusst === null;
+
+  const weiterOffen = (k) =>
+    k.art === "frage" ? k.gewaehlt !== null
+                      : k.aufgedeckt === true && !einschaetzungOffen(k);
+
+  const letzteKarte = () => lauf.index === lauf.karten.length - 1;
+  // Eine Beschriftung fuer beide Weiter-Knoepfe: den auf der Karte und
+  // den im Navigationsbalken unten.
+  const weiterText = () => (letzteKarte() ? "Ergebnis →" : "weiter →");
+
   const punkte = () => {
     let erreicht = 0, moeglich = 0;
     for (const k of lauf.karten) {
@@ -254,7 +284,7 @@
       $("fortschritt-text").textContent = `Karte ${lauf.index + 1} von ${lauf.karten.length}`;
       $("fortschritt-balken").style.width = `${((lauf.index + 1) / lauf.karten.length) * 100}%`;
       $("zurueck").disabled = lauf.index === 0;
-      $("weiter").textContent = lauf.index === lauf.karten.length - 1 ? "Ergebnis →" : "weiter →";
+      $("weiter").textContent = weiterText();   // ABWEICHUNG 7: eine Beschriftung, zwei Knoepfe
     }
   };
 
@@ -359,6 +389,14 @@
       // Block oben. (Eine Flashcard traegt gar kein Erklaerungsfeld,
       // deshalb steht die Pruefung hier und nicht weiter oben.)
       if (k.erklaerung) hinten.append(htmlKnoten("div", "erklaerung", k.erklaerung));
+      /* ABWEICHUNG 7, Teil 1: Der freigegebene Entwurf
+         docs/design/mockups/quiz-aufloesung.html trug in Variante B auf
+         der Rueckseite einen Knopf ("weiter →"); der Prototyp hat ihn
+         unterwegs verloren. Ohne ihn kommt am Rechner niemand mit der
+         Maus weiter: Die Fussleiste ist dort per @media (hover: hover)
+         ausgeblendet, und die Rueckseite trug sonst kein einziges
+         Bedienelement. */
+      hinten.append(knopf("knopf", "A", weiterText(), vor));
     } else {
       hinten.append(
         knoten("span", "augenbraue", "Antwort"),
@@ -366,15 +404,23 @@
         // Block oben.
         htmlKnoten("div", "loesung", k.rueckseite)
       );
-      if (BUNDLE.selbsteinschaetzung && k.gewusst === null) {
+      if (einschaetzungOffen(k)) {
         const wahl = knoten("div", "selbsteinschaetzung");
         wahl.append(
           knopf("knopf", "A", "Wusste ich", () => einschaetzen(true)),
           knopf("knopf leise", "B", "Wusste ich nicht", () => einschaetzen(false))
         );
         hinten.append(wahl);
-      } else if (k.gewusst !== null) {
-        hinten.append(knoten("p", "erklaerung", k.gewusst ? "Als gewusst gewertet." : "Als nicht gewusst gewertet."));
+      } else {
+        /* ABWEICHUNG 7, Teil 2: Derselbe Knopf wie oben, hier fuer die
+           Lernkarte. Der Prototyp haengte den Zweig an k.gewusst !== null
+           und liess bei abgeschalteter Selbsteinschaetzung gar nichts
+           uebrig - zusammen mit der am Rechner ausgeblendeten Fussleiste
+           blieb dann kein sichtbarer Weg vorwaerts. */
+        if (k.gewusst !== null) {
+          hinten.append(knoten("p", "erklaerung", k.gewusst ? "Als gewusst gewertet." : "Als nicht gewusst gewertet."));
+        }
+        hinten.append(knopf("knopf", "A", weiterText(), vor));
       }
     }
     seiten.push(hinten);
@@ -574,18 +620,23 @@
         if (e.key === " " || e.key === "Enter") { e.preventDefault(); umdrehen(); }
         return;
       }
-      if (BUNDLE.selbsteinschaetzung && k.gewusst === null) {
+      if (einschaetzungOffen(k)) {
         if (gross === "A") { e.preventDefault(); einschaetzen(true); }
         if (gross === "B") { e.preventDefault(); einschaetzen(false); }
-      } else if (e.key === " " || e.key === "Enter") {
+      } else if (gross === "A" || e.key === " " || e.key === "Enter") {
+        // ABWEICHUNG 7: A gehoert jetzt zum Weiter-Knopf der Rueckseite.
+        // Wo nur eine Moeglichkeit zur Wahl steht, ist es A - dieselbe
+        // Geste wie bei "A nochmal" im Ergebnis. Leertaste und
+        // Eingabetaste tun wie im Prototyp weiter dasselbe.
         e.preventDefault(); vor();
       }
       return;
     }
 
     if (k.gewaehlt !== null) {
-      // Frage ist beantwortet - nur noch blaettern.
-      if (e.key === " " || e.key === "Enter") { e.preventDefault(); vor(); }
+      // Frage ist beantwortet - nur noch weiter und blaettern.
+      // ABWEICHUNG 7: A bedient den neuen Weiter-Knopf.
+      if (gross === "A" || e.key === " " || e.key === "Enter") { e.preventDefault(); vor(); }
       return;
     }
     const treffer = BUCHSTABEN.indexOf(gross);
