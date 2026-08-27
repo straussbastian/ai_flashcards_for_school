@@ -9,12 +9,18 @@
    Datei falsch.
 
    Die Abweichungen gegenueber dem Prototyp sind einzeln kommentiert
-   und jeweils mit "ABWEICHUNG" markiert. Es sind fuenf:
+   und jeweils mit "ABWEICHUNG" markiert. Es sind sechs:
      1. Das Bundle kommt aus #bundle-daten statt aus einer Konstanten.
      2. Vier Felder werden als HTML eingesetzt statt als Klartext.
      3. Die Zusammensetzung zaehlt der Server (BUNDLE.anzahl).
      4. reihenfolge = "fest" laesst die Kartenreihenfolge stehen.
      5. Ein Bundle ohne Karten zeigt einen Hinweis statt des Knopfes.
+     6. alsText() liest ohne innerHTML und trennt Bloecke.
+
+   Ab Nummer 6 sind es Fehlerbehebungen: Der Prototyp kannte nur eine
+   Konfiguration (selbsteinschaetzung: true) und nur kurze Texte,
+   deshalb konnte er sie nicht zeigen. An diesen Stellen ist er nicht
+   mehr die Referenz - die Spec ist es.
 
    Nach dem Laden spricht der Runner mit niemandem mehr: keine
    Serveranfrage, kein Cookie, kein Local- oder SessionStorage. Neu
@@ -53,13 +59,12 @@
      einsetzt, baut ein Cross-Site-Scripting ein.
 
      Praktisch heisst das: htmlKnoten() nur fuer diese vier Felder,
-     knoten() fuer alles andere. Es gibt in dieser Datei zwei
-     Zuweisungen an innerHTML: die in htmlKnoten() haengt HTML sichtbar
-     in die Seite, die in alsText() weiter unten liest es aus einem nie
-     eingehaengten Hilfsknoten wieder als Klartext aus (fuer die
-     Screenreader-Ansage). Beide bekommen ausschliesslich HTML aus
-     genau diesen vier Feldern zu sehen - nie einen Antworttext, nie
-     einen Titel.
+     knoten() fuer alles andere. Es gibt in dieser Datei genau eine
+     Zuweisung an innerHTML, die in htmlKnoten(). Sie bekommt
+     ausschliesslich HTML aus genau diesen vier Feldern zu sehen - nie
+     einen Antworttext, nie einen Titel. (alsText() weiter unten liest
+     dasselbe HTML als Klartext wieder aus, benutzt dafuer aber
+     DOMParser und kein innerHTML - siehe ABWEICHUNG 6.)
      ================================================================== */
 
   /* ================== Hilfsmittel ================== */
@@ -106,14 +111,37 @@
     return el;
   };
 
-  // Fuer die Ansage an den Screenreader: aus dem gerenderten HTML den
-  // reinen Text gewinnen. Ohne das laese eine Sprachausgabe die Tags
-  // mit vor. Auch hier gilt: Es geht nur HTML aus rendern() hinein, und
-  // der Knoten wird nie in die Seite gehaengt.
+  /* Fuer die Ansage an den Screenreader: aus dem gerenderten HTML den
+     reinen Text gewinnen. Ohne das laese eine Sprachausgabe die Tags
+     mit vor. Auch hier gilt: Es geht nur HTML aus rendern() hinein, und
+     nichts davon wird je in die Seite gehaengt.
+
+     ABWEICHUNG 6: Zweierlei gegenueber dem Prototyp, der diese Funktion
+     gar nicht brauchte (er kannte kein HTML).
+
+     Erstens DOMParser statt eines Hilfsknotens mit innerHTML.
+     parseFromString baut ein eigenes, nie eingehaengtes Dokument: Darin
+     laedt kein Bild, laeuft kein Skript, feuert kein Ereignisattribut.
+     Mit innerHTML an einem createElement-Knoten war das heute zwar
+     folgenlos, aber nur durch die Konvention oben bewacht - hier ist es
+     unabhaengig davon harmlos, auch fuer einen spaeteren Aufrufer, der
+     die Regel nicht kennt. Nebenbei bleibt damit genau eine
+     innerHTML-Zuweisung in dieser Datei, so wie der Block oben es sagt.
+
+     Zweitens werden die Bloecke getrennt. textContent klebt sie sonst
+     aneinander, sobald zwischen ihnen kein Zeilenumbruch steht: aus den
+     Absaetzen "A" und "B" wuerde "AB". Der Trenner haengt so nicht mehr
+     daran, wie der Renderer sein HTML einrueckt. Genommen wird jeweils
+     der innerste Block, damit der Text eines <li> nicht doppelt in der
+     Ansage landet. */
+  const BLOCKTAGS = "p, li, pre, blockquote, h3, h4";
   const alsText = (html) => {
-    const hilfe = document.createElement("div");
-    hilfe.innerHTML = html;
-    return hilfe.textContent.trim();
+    const koerper = new DOMParser().parseFromString(html, "text/html").body;
+    const bloecke = [...koerper.querySelectorAll(BLOCKTAGS)]
+      .filter((el) => !el.querySelector(BLOCKTAGS))
+      .map((el) => el.textContent.trim())
+      .filter(Boolean);
+    return (bloecke.length ? bloecke.join(" ") : koerper.textContent).trim();
   };
 
   // Jeder Knopf, der auch per Tastatur erreichbar ist, traegt sein Kuerzel
