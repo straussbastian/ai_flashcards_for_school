@@ -58,7 +58,7 @@ def _nicht_gefunden(request: Request) -> HTMLResponse:
     """
     return rendern(request, "fehler.html", status_code=404,
                    ueberschrift="Diese Lernseite gibt es nicht",
-                   text="Pruef den Link, den du bekommen hast.")
+                   text="Prüf den Link, den du bekommen hast.")
 
 
 def _einbetten(daten: dict) -> str:
