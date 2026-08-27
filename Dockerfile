@@ -45,9 +45,10 @@ RUN chmod -R a+rX /app
 
 EXPOSE 8000
 
-# Ergaenzt die Faelle, die supervisord/der Eventlistener selbst nicht nach
-# aussen sichtbar machen: Docker/Coolify markieren den Container als
-# "unhealthy", wenn /healthz nicht mehr antwortet.
+# Der HEALTHCHECK macht einen dauerhaft gescheiterten App-Prozess sichtbar:
+# Docker/Coolify markieren den Container als "unhealthy", wenn /healthz
+# nicht mehr antwortet. Der Container wird dadurch nicht beendet — die
+# Betriebsebene (Docker/Coolify) reagiert darauf, nicht die Anwendung.
 HEALTHCHECK --interval=15s --timeout=5s --start-period=90s --retries=3 \
     CMD python3 -c "import sys, urllib.request; \
 sys.exit(0 if urllib.request.urlopen('http://localhost:8000/healthz', timeout=3).status == 200 else 1)"
