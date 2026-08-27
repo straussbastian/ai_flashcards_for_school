@@ -33,4 +33,45 @@ fi
 # muesste. db-init.sh fragt stattdessen den Cluster selbst (pg_roles,
 # pg_database) und darf deshalb bei jedem Start unveraendert durchlaufen.
 
+# --- Verwaiste Sperrdatei aus einem frueheren Lauf entfernen ----------------
+# Wird der Container hart gestoppt - docker rm -f, eine ueberschrittene
+# Stop-Frist in Coolify, ein Stromausfall -, bekommt PostgreSQL kein Signal
+# mehr und laesst seine Sperrdatei postmaster.pid liegen. Beim naechsten Start
+# liest PostgreSQL die dort vermerkte Prozessnummer und prueft, ob sie noch
+# lebt. In einem frischen Container beginnen die Prozessnummern wieder bei 1,
+# die vermerkte Nummer ist deshalb haeufig wieder vergeben - dann haelt
+# PostgreSQL einen voellig fremden Prozess fuer einen zweiten Server und
+# verweigert den Start:
+#
+#   FATAL:  lock file "postmaster.pid" already exists
+#   HINT:   Is another postmaster (PID 13) running in data directory ...
+#
+# supervisord versucht es viermal, gibt auf, und der Container bleibt
+# dauerhaft ungesund. Er heilt sich auch durch weitere Neustarts nicht,
+# solange die Datei liegen bleibt.
+#
+# Das Entfernen ist hier sicher - anders als auf einem gewoehnlichen Server:
+# Der Container hat einen eigenen, frischen Prozessraum. Ein Prozess aus einem
+# frueheren Lauf kann darin unmoeglich noch laufen. Eine Sperrdatei, die beim
+# Start des Containers schon vorliegt, ist deshalb immer verwaist. Auf einem
+# gewoehnlichen Server waere derselbe Griff falsch: Dort kann dieselbe Datei
+# einen tatsaechlich laufenden zweiten Server bedeuten.
+#
+# Bewusst nur genau diese eine Datei und nicht das Datenverzeichnis: Die Daten
+# selbst sind unversehrt. PostgreSQL faehrt nach einem harten Stopp aus dem
+# WAL per Crash-Recovery sauber hoch - das ist der vorgesehene Weg und
+# braucht nichts weiter als die Daten, die ohnehin da sind.
+#
+# Und nicht still: Ein unbemerkter Eingriff in ein Datenverzeichnis ist das
+# Letzte, was jemand bei der Fehlersuche gebrauchen kann.
+if [ -e "$PGDATA/postmaster.pid" ]; then
+    vermerkte_pid=$(head -n 1 "$PGDATA/postmaster.pid" 2>/dev/null || true)
+    echo "Verwaiste Sperrdatei gefunden: $PGDATA/postmaster.pid (vermerkte PID: ${vermerkte_pid:-unbekannt})."
+    echo "Sie stammt aus einem frueheren, hart beendeten Lauf und wird entfernt."
+    echo "Das ist unbedenklich: Dieser Container hat einen frischen Prozessraum," \
+         "in dem kein PostgreSQL aus einem frueheren Lauf mehr laufen kann."
+    echo "Die Daten bleiben unangetastet; PostgreSQL faehrt per Crash-Recovery hoch."
+    rm -f "$PGDATA/postmaster.pid"
+fi
+
 exec supervisord -c /app/docker/supervisord.conf
