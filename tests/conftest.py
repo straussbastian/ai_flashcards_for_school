@@ -166,3 +166,34 @@ def mcp_sitzung(session: AsyncSession, sitzungsquelle_gesperrt: None) -> AsyncSe
 
     quelle_setzen(testquelle)
     return session
+
+
+# Feste Testwerte fuer alles, was aus der Konfiguration kommt. Sie stehen hier
+# und nicht in einzelnen Tests, damit dieselben Werte ueberall gelten - eine
+# OAuth-Antwort haengt an mehreren davon gleichzeitig.
+TEST_BASIS_URL = "https://karten.example.de"
+TEST_APP_SECRET = "test-schluessel-nur-fuer-die-suite"
+TEST_LEHRERINNEN_PASSWORT = "test-passwort-nur-fuer-die-suite"
+
+
+@pytest.fixture
+def konfiguration(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Setzt feste Werte fuer BASE_URL, APP_SECRET und TEACHER_PASSWORD.
+
+    Ohne diese Fixture haengt jeder OAuth-Test an dem, was gerade in der
+    lokalen .env oder in der CI steht - lokal https://karten.example.de, in
+    der CI http://localhost:8000. Ein Test, der die erzeugten URLs prueft,
+    waere dann an einem der beiden Orte rot.
+
+    get_settings ist lru_cache-dekoriert und muss deshalb VOR und NACH dem
+    Setzen geleert werden: davor, damit die neuen Werte greifen, danach,
+    damit der naechste Test nicht die Testwerte erbt.
+    """
+    from app.config import get_settings
+
+    get_settings.cache_clear()
+    monkeypatch.setenv("BASE_URL", TEST_BASIS_URL)
+    monkeypatch.setenv("APP_SECRET", TEST_APP_SECRET)
+    monkeypatch.setenv("TEACHER_PASSWORD", TEST_LEHRERINNEN_PASSWORT)
+    yield
+    get_settings.cache_clear()

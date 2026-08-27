@@ -4,7 +4,7 @@ from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app.routen import lernseite, system
+from app.routen import lernseite, oauth, system
 from app.routen.lernseite import _nicht_gefunden
 from app.sicherheit import Schutzkoepfe
 from app.templates import VERZEICHNIS
@@ -16,6 +16,7 @@ app.add_middleware(Schutzkoepfe)
 app.mount("/static", StaticFiles(directory=str(VERZEICHNIS.parent / "static")), name="static")
 
 app.include_router(system.router)
+app.include_router(oauth.router)
 # Muss als letzter kommen: /{slug} ist zwar durch ein Muster begrenzt, aber
 # eine spaetere Route mit gleicher Form wuerde sonst verdeckt.
 app.include_router(lernseite.router)
