@@ -109,7 +109,7 @@ async def registrieren(
     except ValueError:
         return _fehler(
             "invalid_client_metadata",
-            "Der Anfragekoerper ist kein gueltiges JSON.",
+            "Der Anfragekörper ist kein gültiges JSON.",
         )
     try:
         wunsch = Registrierungswunsch.model_validate(rohdaten)
@@ -117,13 +117,13 @@ async def registrieren(
         return _fehler(
             "invalid_client_metadata",
             "Die Anfrage braucht das Feld 'redirect_uris' mit mindestens "
-            "einer Rueckadresse.",
+            "einer Rückadresse.",
         )
 
     if not wunsch.redirect_uris:
         return _fehler(
             "invalid_redirect_uri",
-            "Es wurde keine Rueckadresse angegeben. Erlaubt sind "
+            "Es wurde keine Rückadresse angegeben. Erlaubt sind "
             f"{CLAUDE_RUECKSPRUNG} sowie http://localhost/callback und "
             "http://127.0.0.1/callback.",
         )
@@ -131,7 +131,7 @@ async def registrieren(
         if not registrierbar(uri):
             return _fehler(
                 "invalid_redirect_uri",
-                f"Die Rueckadresse {uri!r} ist auf diesem Server nicht "
+                f"Die Rückadresse {uri!r} ist auf diesem Server nicht "
                 f"erlaubt. Erlaubt sind {CLAUDE_RUECKSPRUNG} sowie "
                 "http://localhost/callback und http://127.0.0.1/callback "
                 "(der Port darf dort abweichen).",
@@ -212,7 +212,7 @@ async def _vorpruefen(
         return _seite_mit_fehler(
             anfrage,
             "Der Client, der sich verbinden will, ist diesem Server nicht "
-            "bekannt. Bitte entferne den Connector in Claude und fuege ihn "
+            "bekannt. Bitte entferne den Connector in Claude und füge ihn "
             "noch einmal hinzu.",
         )
 
@@ -220,8 +220,8 @@ async def _vorpruefen(
     if not redirect_uri or not passt(redirect_uri, list(kunde.redirect_uris)):
         return _seite_mit_fehler(
             anfrage,
-            "Die Rueckadresse der Anfrage gehoert nicht zu diesem Client. "
-            "Bitte entferne den Connector in Claude und fuege ihn noch "
+            "Die Rückadresse der Anfrage gehört nicht zu diesem Client. "
+            "Bitte entferne den Connector in Claude und füge ihn noch "
             "einmal hinzu.",
         )
 

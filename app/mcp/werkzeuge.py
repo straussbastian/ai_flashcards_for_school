@@ -88,18 +88,18 @@ def registrieren(server: MCPServer) -> None:
 
     @server.tool(
         description=(
-            "Legt ein neues Lernpaket an und gibt den fertigen Link zurueck. "
-            "Ein Aufruf genuegt fuer ein komplettes Arbeitsblatt: Titel und "
-            "alle Karten auf einmal uebergeben.\n\n"
-            "WICHTIG fuer Fragen: Benutze KEINE Antwortmoeglichkeiten wie "
+            "Legt ein neues Lernpaket an und gibt den fertigen Link zurück. "
+            "Ein Aufruf genügt für ein komplettes Arbeitsblatt: Titel und "
+            "alle Karten auf einmal übergeben.\n\n"
+            "WICHTIG für Fragen: Benutze KEINE Antwortmöglichkeiten wie "
             "'keine der genannten' oder 'A und B sind richtig'. Die "
             "Reihenfolge der Antworten wird bei jedem Durchlauf neu gemischt "
-            "- solche Moeglichkeiten ergeben danach keinen Sinn mehr."
+            "- solche Möglichkeiten ergeben danach keinen Sinn mehr."
         )
     )
     @als_werkzeug
     async def bundle_anlegen(
-        titel: Annotated[str, Field(description="Ueberschrift der Lernseite.")],
+        titel: Annotated[str, Field(description="Überschrift der Lernseite.")],
         karten: Annotated[list[KarteEingabe], Field(description="Die Karten des Lernpakets.")],
         beschreibung: Annotated[
             str | None, Field(default=None, description="Optionaler Einleitungstext, Markdown.")
@@ -160,7 +160,7 @@ def registrieren(server: MCPServer) -> None:
     @server.tool(
         description=(
             "Zeigt ein Lernpaket mit allen Karten, ihren IDs und ihren "
-            "Positionen. Die IDs braucht man fuer karte_aendern und "
+            "Positionen. Die IDs braucht man für karte_aendern und "
             "karte_loeschen."
         )
     )

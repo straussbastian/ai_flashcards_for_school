@@ -15,7 +15,7 @@ class KarteEingabe(BaseModel):
 
     art: Annotated[
         Literal["flashcard", "frage"],
-        Field(description="'flashcard' zum Lernen, 'frage' fuer Multiple Choice."),
+        Field(description="'flashcard' zum Lernen, 'frage' für Multiple Choice."),
     ]
     vorderseite: Annotated[
         str,
@@ -30,7 +30,7 @@ class KarteEingabe(BaseModel):
         str | None,
         Field(
             default=None,
-            description="Nur bei art='flashcard': die Loesung. Einfaches Markdown.",
+            description="Nur bei art='flashcard': die Lösung. Einfaches Markdown.",
         ),
     ] = None
     antworten: Annotated[
@@ -38,8 +38,8 @@ class KarteEingabe(BaseModel):
         Field(
             default=None,
             description=(
-                "Nur bei art='frage': zwei bis vier Antwortmoeglichkeiten als "
-                "Klartext, ohne Buchstaben davor. Benutze KEINE Moeglichkeiten "
+                "Nur bei art='frage': zwei bis vier Antwortmöglichkeiten als "
+                "Klartext, ohne Buchstaben davor. Benutze KEINE Möglichkeiten "
                 "wie 'keine der genannten' oder 'A und B sind richtig' - die "
                 "Reihenfolge wird bei jedem Durchlauf neu gemischt, solche "
                 "Antworten ergeben danach keinen Sinn mehr."
@@ -61,8 +61,8 @@ class KarteEingabe(BaseModel):
         Field(
             default=None,
             description=(
-                "Nur bei art='frage': optionale Erklaerung, die nach dem "
-                "Antworten auf der Rueckseite erscheint."
+                "Nur bei art='frage': optionale Erklärung, die nach dem "
+                "Antworten auf der Rückseite erscheint."
             ),
         ),
     ] = None

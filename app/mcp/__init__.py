@@ -64,12 +64,12 @@ def mcp_bauen() -> tuple[MCPServer, Starlette]:
     basis_url = get_settings().base_url
     server = MCPServer(
         "flashcards",
-        title="Lernseiten fuer die Berufsschule",
+        title="Lernseiten für die Berufsschule",
         instructions=(
-            "Mit diesen Werkzeugen legst du Lernpakete fuer eine Berufsschule "
+            "Mit diesen Werkzeugen legst du Lernpakete für eine Berufsschule "
             "an und pflegst sie. Jedes Lernpaket bekommt eine eigene Adresse "
-            "aus drei deutschen Woertern. Gib der Lehrerin nach jeder "
-            "Aenderung den vollstaendigen Link."
+            "aus drei deutschen Wörtern. Gib der Lehrerin nach jeder "
+            "Änderung den vollständigen Link."
         ),
         token_verifier=TokenPruefer(),
         auth=AuthSettings(

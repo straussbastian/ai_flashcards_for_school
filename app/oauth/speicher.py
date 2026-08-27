@@ -114,8 +114,8 @@ async def code_einloesen(
     """
     abgelehnt = OAuthFehler(
         "invalid_grant",
-        "Der Autorisierungscode ist ungueltig, abgelaufen oder bereits "
-        "eingeloest. Bitte verbinde den Connector noch einmal.",
+        "Der Autorisierungscode ist ungültig, abgelaufen oder bereits "
+        "eingelöst. Bitte verbinde den Connector noch einmal.",
     )
 
     gespeichert = await sitzung.scalar(
@@ -209,7 +209,7 @@ async def erneuern(
     """
     abgelehnt = OAuthFehler(
         "invalid_grant",
-        "Der Erneuerungstoken ist ungueltig, abgelaufen oder wurde bereits "
+        "Der Erneuerungstoken ist ungültig, abgelaufen oder wurde bereits "
         "benutzt. Bitte verbinde den Connector noch einmal.",
     )
 

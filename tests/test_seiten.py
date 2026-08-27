@@ -13,12 +13,14 @@ inaktives Bundle und damit die Fixtures "klient" und "session".
 
 import html as html_modul
 import re
+from urllib.parse import quote
 
 import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
 from app.models import Bundle
+from app.oauth.redirect import CLAUDE_RUECKSPRUNG
 
 STYLESHEET = "/static/lernseite.css"
 
@@ -153,6 +155,12 @@ UMLAUTFEHLER = [
     "schoen", "zurueck", "pruef", "gehoer", "oeffn", "waehl", "naechst",
     "moeglich", "gueltig", "laeuft", "spaet", "aender", "erklaer", "rueck",
     "loesch", "loesung", "stueck", "tuer", "fuehr", "bloed", "hoer",
+    # "fuege" stand so auf der OAuth-Fehlerseite ("fuege ihn noch einmal
+    # hinzu") und wurde von keinem der anderen Staemme erfasst. Achtung,
+    # falls einmal ein Werkzeugname im Anzeigetext auftaucht:
+    # karten_hinzufuegen ist ein Bezeichner und bleibt ASCII - dann muss
+    # nicht der Name geaendert werden, sondern der Satz drumherum.
+    "fuege",
 ]
 
 
@@ -199,3 +207,58 @@ async def test_sichtbarer_text_der_410_seite_ohne_umlautfehler(klient, session):
     antwort = await klient.get("/stille-tafel-ruht")
     gefunden = umlautfehler_finden(antwort.text)
     assert gefunden == [], f"Die 410-Seite zeigt Ersatzschreibweisen: {gefunden}"
+
+
+# ===================== Schreibweise der OAuth-Seiten =====================
+
+# Die Zustimmungsseite und die OAuth-Fehlerseite sind die einzigen weiteren
+# Seiten, die ein Mensch zu sehen bekommt - die Lehrerin sieht sie genau
+# dann, wenn sie den Connector verbindet. Sie laufen deshalb durch denselben
+# Pruefer wie Startseite und Fehlerseiten. Beide brauchen die Fixture
+# "client" (echte Testdatenbank) und "konfiguration" (feste BASE_URL), weil
+# sie einen registrierten Client nachschlagen.
+
+def _client_registrieren(client) -> str:
+    antwort = client.post(
+        "/oauth/register",
+        json={"client_name": "Claude", "redirect_uris": [CLAUDE_RUECKSPRUNG]},
+    )
+    return antwort.json()["client_id"]
+
+
+def _zustimmungsadresse(client_id: str) -> str:
+    return (
+        "/oauth/authorize?response_type=code"
+        f"&client_id={client_id}"
+        f"&redirect_uri={quote(CLAUDE_RUECKSPRUNG, safe='')}"
+        "&scope=lernseiten&state=abc"
+        "&code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"
+        "&code_challenge_method=S256"
+    )
+
+
+def test_sichtbarer_text_der_zustimmungsseite_ohne_umlautfehler(client, konfiguration):
+    antwort = client.get(_zustimmungsadresse(_client_registrieren(client)))
+    assert antwort.status_code == 200
+    gefunden = umlautfehler_finden(antwort.text)
+    assert gefunden == [], f"Die Zustimmungsseite zeigt Ersatzschreibweisen: {gefunden}"
+
+
+def test_sichtbarer_text_der_oauth_fehlerseite_ohne_umlautfehler(client, konfiguration):
+    """Ein unbekannter Client fuehrt zur Fehlerseite - sie darf nicht weiterleiten."""
+    antwort = client.get(_zustimmungsadresse("gibt-es-nicht"))
+    assert antwort.status_code == 400
+    gefunden = umlautfehler_finden(antwort.text)
+    assert gefunden == [], f"Die OAuth-Fehlerseite zeigt Ersatzschreibweisen: {gefunden}"
+
+
+def test_die_zweite_oauth_fehlerseite_ohne_umlautfehler(client, konfiguration):
+    """Registrierter Client, aber fremde Rueckadresse - der zweite Fehlertext."""
+    kennung = _client_registrieren(client)
+    adresse = _zustimmungsadresse(kennung).replace(
+        quote(CLAUDE_RUECKSPRUNG, safe=""), quote("https://boese.example/cb", safe="")
+    )
+    antwort = client.get(adresse)
+    assert antwort.status_code == 400
+    gefunden = umlautfehler_finden(antwort.text)
+    assert gefunden == [], f"Die OAuth-Fehlerseite zeigt Ersatzschreibweisen: {gefunden}"
