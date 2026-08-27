@@ -2,6 +2,7 @@ import pytest
 from sqlalchemy import insert, text
 from sqlalchemy.exc import IntegrityError
 
+from app.markdown import MAX_LAENGE
 from app.models import Bundle, Karte
 
 
@@ -322,3 +323,206 @@ async def test_antwort_an_bestehende_frage_anhaengen_wird_uebernommen(session):
     await session.refresh(karte)
 
     assert karte.antworten == ["a", "b", "c"]
+
+
+# ---------------------------------------------------------------------------
+# Laengengrenzen
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "spalte, constraint",
+    [
+        ("vorderseite", "ck_karten_vorderseite_max_laenge"),
+        ("rueckseite", "ck_karten_rueckseite_max_laenge"),
+    ],
+)
+async def test_markdown_grenze_und_datenbankgrenze_passen_zusammen(
+    session, spalte, constraint
+):
+    """Haelt MAX_LAENGE aus app/markdown.py und die Grenze in der Datenbank zusammen.
+
+    app/markdown.rendern() wirft MarkdownZuLang oberhalb von MAX_LAENGE, und
+    gerendert wird erst beim Ausliefern der Lernseite. Waere die Grenze der
+    Datenbank groesser, liesse sich eine Karte speichern, die danach die
+    ganze Lernseite fuer alle Lernenden dieses Bundles kippt - nicht nur die
+    eine Karte. Waere sie kleiner, lehnte die Datenbank Texte ab, die die
+    Anwendung problemlos rendert.
+
+    Die Zahl steht bewusst dreimal ausgeschrieben (app/markdown.py,
+    app/models.py, migrations/versions/0001_grundmodell.py), weil eine
+    Migration nicht davon abhaengen darf, was gerade im Anwendungscode steht.
+    Dieser Test ist der Preis dafuer und die Absicherung dagegen: Genau
+    MAX_LAENGE Zeichen muessen speicherbar sein, ein Zeichen mehr nicht.
+    Laufen die Zahlen kuenftig auseinander, wird er rot.
+    """
+    bundle = await _bundle(session)
+    felder = {
+        "bundle_id": bundle.id,
+        "art": "flashcard",
+        "vorderseite": "Frage",
+        "rueckseite": "Antwort",
+    }
+
+    # Genau MAX_LAENGE Zeichen: muss durchgehen.
+    session.add(Karte(**{**felder, "position": 1, spalte: "a" * MAX_LAENGE}))
+    await session.flush()
+
+    # Ein Zeichen mehr: muss an genau diesem Constraint scheitern.
+    session.add(Karte(**{**felder, "position": 2, spalte: "a" * (MAX_LAENGE + 1)}))
+    with pytest.raises(IntegrityError) as exc_info:
+        await session.flush()
+    assert _constraint_name(exc_info) == constraint
+
+
+async def test_zu_lange_erklaerung_wird_abgelehnt(session):
+    bundle = await _bundle(session)
+    session.add(
+        Karte(
+            bundle_id=bundle.id,
+            position=1,
+            art="frage",
+            vorderseite="Frage",
+            antworten=["A", "B"],
+            richtige_index=0,
+            erklaerung="a" * (MAX_LAENGE + 1),
+        )
+    )
+    with pytest.raises(IntegrityError) as exc_info:
+        await session.flush()
+    assert _constraint_name(exc_info) == "ck_karten_erklaerung_max_laenge"
+
+
+async def test_zu_lange_beschreibung_wird_abgelehnt(session):
+    session.add(
+        Bundle(
+            slug="gelbe-lampe-summt",
+            titel="Test",
+            beschreibung="a" * (MAX_LAENGE + 1),
+        )
+    )
+    with pytest.raises(IntegrityError) as exc_info:
+        await session.flush()
+    assert _constraint_name(exc_info) == "ck_bundles_beschreibung_max_laenge"
+
+
+async def test_zu_langer_titel_wird_abgelehnt(session):
+    session.add(Bundle(slug="graue-maus-pfeift", titel="a" * 201))
+    with pytest.raises(IntegrityError) as exc_info:
+        await session.flush()
+    assert _constraint_name(exc_info) == "ck_bundles_titel_max_laenge"
+
+
+async def test_zu_lange_klasse_wird_abgelehnt(session):
+    session.add(Bundle(slug="weisse-taube-fliegt", titel="Test", klasse="a" * 61))
+    with pytest.raises(IntegrityError) as exc_info:
+        await session.flush()
+    assert _constraint_name(exc_info) == "ck_bundles_klasse_max_laenge"
+
+
+# ---------------------------------------------------------------------------
+# antworten ist eine Textliste, nicht irgendein Array
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "antworten",
+    [
+        pytest.param([1, 2, 3], id="zahlen"),
+        pytest.param([None, None], id="null"),
+        pytest.param([{"a": 1}, {"b": 2}], id="objekte"),
+        pytest.param(["Zagreb", 42], id="gemischt_text_und_zahl"),
+    ],
+)
+async def test_antworten_die_keine_texte_sind_werden_abgelehnt(session, antworten):
+    """Die Spec nennt in Abschnitt 4 eine Textliste, nicht irgendein Array.
+
+    Vorher prueften die Constraints nur jsonb_typeof(...) = 'array' und die
+    Anzahl; [1, 2, 3], [null, null] und [{"a":1},{"b":2}] gingen durch. Plan 2
+    sucht den Text der richtigen Antwort in dieser Liste, um richtige_index zu
+    bestimmen - auf Nicht-Strings bricht das ab oder liefert stillschweigend
+    Unsinn.
+
+    Der Insert laeuft bewusst ueber SQLAlchemy Core (insert(Karte.__table__))
+    statt ueber Karte(...): Nur so ist belegt, dass die Ablehnung wirklich
+    von der DATENBANK kommt und nicht schon vorher in Python passiert. Ein
+    IntegrityError mit dem Constraint-Namen aus psycopgs Diagnostics kann
+    ausschliesslich der Server geworfen haben.
+    """
+    bundle = await _bundle(session)
+    with pytest.raises(IntegrityError) as exc_info:
+        await session.execute(
+            insert(Karte.__table__).values(
+                bundle_id=bundle.id,
+                position=1,
+                art="frage",
+                vorderseite="Frage",
+                antworten=antworten,
+                richtige_index=0,
+            )
+        )
+    assert _constraint_name(exc_info) == "ck_karten_antworten_sind_texte"
+
+
+@pytest.mark.parametrize(
+    "antworten",
+    [
+        pytest.param(["Zagreb", ""], id="leerstring"),
+        pytest.param(["Zagreb", "   "], id="nur_leerzeichen"),
+    ],
+)
+async def test_leere_antworttexte_werden_abgelehnt(session, antworten):
+    """Eine Antwortmoeglichkeit ohne sichtbaren Text ist auf der Karte ein leerer Knopf.
+
+    Auch hier ueber Core statt ueber das ORM, damit die Ablehnung
+    nachweislich aus der Datenbank kommt.
+    """
+    bundle = await _bundle(session)
+    with pytest.raises(IntegrityError) as exc_info:
+        await session.execute(
+            insert(Karte.__table__).values(
+                bundle_id=bundle.id,
+                position=1,
+                art="frage",
+                vorderseite="Frage",
+                antworten=antworten,
+                richtige_index=0,
+            )
+        )
+    assert _constraint_name(exc_info) == "ck_karten_antworten_nicht_leer"
+
+
+@pytest.mark.parametrize("leerer_wert", ["", "   "], ids=["leerstring", "nur_leerzeichen"])
+async def test_frage_mit_leerer_erklaerung_wird_abgelehnt(session, leerer_wert):
+    bundle = await _bundle(session)
+    session.add(
+        Karte(
+            bundle_id=bundle.id,
+            position=1,
+            art="frage",
+            vorderseite="Frage",
+            antworten=["A", "B"],
+            richtige_index=0,
+            erklaerung=leerer_wert,
+        )
+    )
+    with pytest.raises(IntegrityError) as exc_info:
+        await session.flush()
+    assert _constraint_name(exc_info) == "ck_karten_erklaerung_nicht_leer"
+
+
+async def test_doppelter_slug_wird_abgelehnt(session):
+    """Die Eindeutigkeit der Adresse, auf der die gesamte Slug-Logik ruht.
+
+    app/slug.py erzeugt Drei-Wort-Adressen und behandelt Kollisionen, indem
+    es bei einem Treffer neu wuerfelt. Dieses Verfahren hat nur dann einen
+    Sinn, wenn die Datenbank einen doppelten Slug tatsaechlich zurueckweist -
+    sonst kaeme eine Kollision unter Last still durch und zwei Lernseiten
+    laegen unter derselben Adresse.
+    """
+    session.add(Bundle(slug="rote-katze-springt", titel="Erstes Bundle"))
+    await session.flush()
+    session.add(Bundle(slug="rote-katze-springt", titel="Zweites Bundle"))
+    with pytest.raises(IntegrityError) as exc_info:
+        await session.flush()
+    assert _constraint_name(exc_info) == "uq_bundles_slug"

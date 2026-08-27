@@ -19,6 +19,49 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
 
+# --- Laengengrenzen ---------------------------------------------------------
+# MUSS mit MAX_LAENGE in app/markdown.py uebereinstimmen. Der Wert steht hier
+# absichtlich ausgeschrieben statt importiert: Die Migration
+# migrations/versions/0001_grundmodell.py traegt dieselbe Zahl und darf nicht
+# davon abhaengen, was gerade im Anwendungscode steht - eine eingespielte
+# Migration beschreibt den Zustand der Datenbank von damals, nicht den von
+# heute. Damit die drei Zahlen nicht auseinanderlaufen, haelt
+# tests/test_models.py::test_markdown_grenze_und_datenbankgrenze_passen_zusammen
+# sie gegeneinander: Genau MAX_LAENGE Zeichen muessen speicherbar sein, ein
+# Zeichen mehr nicht.
+#
+# Der Grund fuer die Grenze: app/markdown.rendern() wirft MarkdownZuLang,
+# sobald ein Text MAX_LAENGE ueberschreitet. Gerendert wird erst beim
+# Ausliefern der Lernseite. Eine zu lange Karte in der Datenbank macht deshalb
+# nicht nur sich selbst kaputt, sondern die ganze Seite fuer alle Lernenden
+# dieses Bundles. Was nicht ausgeliefert werden kann, darf gar nicht erst
+# hineinkommen.
+MAX_MARKDOWN_LAENGE = 5000
+
+# Der Titel steht als einzeilige Ueberschrift auf der Startseite des Bundles
+# (siehe docs/design/prototyp.html) und ist kein Markdown. 200 Zeichen sind
+# fuer eine Ueberschrift grosszuegig und bleiben trotzdem deutlich unterhalb
+# dessen, was das Layout noch traegt.
+MAX_TITEL_LAENGE = 200
+
+# "FS 23b" laut Spec, Abschnitt 4. 60 Zeichen fassen auch eine ausgeschriebene
+# Klassenbezeichnung wie "Fachinformatiker Systemintegration 23b" bequem.
+MAX_KLASSE_LAENGE = 60
+
+# --- Warum CHECK und nicht VARCHAR(n) ---------------------------------------
+# Die Laengengrenzen der Inhaltsspalten stehen als CHECK-Constraint da und
+# nicht als VARCHAR(n). Eine ueberlange Eingabe soll denselben Fehlertyp
+# ausloesen wie jede andere verletzte Regel dieses Schemas (IntegrityError mit
+# lesbarem Constraint-Namen) und nicht ein DataError aus der
+# Typkonvertierung - siehe die Begruendung bei "art" und "reihenfolge" unten.
+# Nur so kann der MCP-Server aus Plan 2 alle Ablehnungen der Datenbank an
+# einer Stelle in verstaendliche Meldungen uebersetzen.
+# VARCHAR(n) bleibt den Spalten vorbehalten, die die Anwendung selbst fuellt
+# (slug, art, reihenfolge): Deren Inhalte stammen aus einem festen Vorrat, den
+# eine Eingabe von aussen nie erreicht.
+# length(NULL) ist NULL, und ein CHECK gilt bei NULL als erfuellt - die
+# optionalen Spalten brauchen deshalb kein zusaetzliches "IS NULL OR".
+
 
 class Bundle(Base):
     """Eine Lernseite unter einer Drei-Wort-Adresse."""
@@ -35,7 +78,7 @@ class Bundle(Base):
     slug: Mapped[str] = mapped_column(String(120), nullable=False)
     titel: Mapped[str] = mapped_column(Text, nullable=False)
     beschreibung: Mapped[str | None] = mapped_column(Text)
-    klasse: Mapped[str | None] = mapped_column(String(60))
+    klasse: Mapped[str | None] = mapped_column(Text)
     selbsteinschaetzung: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default="true"
     )
@@ -83,6 +126,20 @@ class Bundle(Base):
         CheckConstraint(
             "length(btrim(slug)) > 0", name="ck_bundles_slug_nicht_leer"
         ),
+        # Laengengrenzen, siehe Kommentarblock oben.
+        CheckConstraint(
+            f"length(titel) <= {MAX_TITEL_LAENGE}",
+            name="ck_bundles_titel_max_laenge",
+        ),
+        # beschreibung ist Markdown und geht durch app/markdown.rendern().
+        CheckConstraint(
+            f"length(beschreibung) <= {MAX_MARKDOWN_LAENGE}",
+            name="ck_bundles_beschreibung_max_laenge",
+        ),
+        CheckConstraint(
+            f"length(klasse) <= {MAX_KLASSE_LAENGE}",
+            name="ck_bundles_klasse_max_laenge",
+        ),
     )
 
 
@@ -98,7 +155,16 @@ class Karte(Base):
         ForeignKey("bundles.id", ondelete="CASCADE"), nullable=False, index=True
     )
     position: Mapped[int] = mapped_column(Integer, nullable=False)
-    art: Mapped[str] = mapped_column(String(12), nullable=False)
+    # String(30) statt String(12): Wie bei "reihenfolge" oben darf ein
+    # unbekannter Bezeichner nicht schon an der Spaltenlaenge scheitern
+    # (StringDataRightTruncation -> DataError), sondern muss am
+    # CHECK-Constraint ck_karten_art abgelehnt werden (IntegrityError).
+    # String(12) fasste "flashcard" (9) und "frage" (5), aber ein kuenftiger
+    # Kartentyp mit laengerem Namen waere in genau diese Falle gelaufen und
+    # haette den Fehlerklassen-Vertrag gebrochen, auf dem alle
+    # Ablehnungstests beruhen. 30 Zeichen sind fuer einen Bezeichner aus
+    # einem festen Vorrat reichlich.
+    art: Mapped[str] = mapped_column(String(30), nullable=False)
     vorderseite: Mapped[str] = mapped_column(Text, nullable=False)
     rueckseite: Mapped[str | None] = mapped_column(Text)
     # MutableList.as_mutable(...) statt nur JSONB: Ohne das erkennt
@@ -146,6 +212,27 @@ class Karte(Base):
             "rueckseite IS NULL OR length(btrim(rueckseite)) > 0",
             name="ck_karten_rueckseite_nicht_leer",
         ),
+        # erklaerung in derselben Machart: optional, aber wenn gesetzt, dann
+        # mit Inhalt. Eine Erklaerung aus lauter Leerzeichen erzeugt auf der
+        # Rueckseite einen leeren Absatz, den niemand gewollt hat.
+        CheckConstraint(
+            "erklaerung IS NULL OR length(btrim(erklaerung)) > 0",
+            name="ck_karten_erklaerung_nicht_leer",
+        ),
+        # Laengengrenzen, siehe Kommentarblock oben. Alle drei Spalten sind
+        # Markdown und gehen durch app/markdown.rendern().
+        CheckConstraint(
+            f"length(vorderseite) <= {MAX_MARKDOWN_LAENGE}",
+            name="ck_karten_vorderseite_max_laenge",
+        ),
+        CheckConstraint(
+            f"length(rueckseite) <= {MAX_MARKDOWN_LAENGE}",
+            name="ck_karten_rueckseite_max_laenge",
+        ),
+        CheckConstraint(
+            f"length(erklaerung) <= {MAX_MARKDOWN_LAENGE}",
+            name="ck_karten_erklaerung_max_laenge",
+        ),
         CheckConstraint(
             """
             (art = 'flashcard'
@@ -184,6 +271,58 @@ class Karte(Base):
             END
             """,
             name="ck_karten_antwortanzahl",
+        ),
+        # Die Spec nennt in Abschnitt 4 ausdruecklich eine Textliste. Ohne
+        # diesen Constraint gingen [1, 2, 3], [null, null] oder
+        # [{"a":1},{"b":2}] durch: jsonb_typeof(...) = 'array' und die
+        # Anzahl stimmen ja. Plan 2 sucht den Text der richtigen Antwort in
+        # dieser Liste, um richtige_index zu bestimmen - auf Nicht-Strings
+        # bricht das ab oder liefert stillschweigend Unsinn.
+        #
+        # Ein CHECK-Constraint darf keine Unterabfrage enthalten, ein
+        # "EXISTS (SELECT ... FROM jsonb_array_elements(...))" scheidet also
+        # aus. Stattdessen der Vergleich zweier Anzahlen:
+        # jsonb_path_query_array() liefert (ohne Unterabfrage und als
+        # immutable Funktion in einem CHECK zulaessig) genau die Elemente,
+        # auf die der Pfadausdruck passt - hier alle vom Typ String. Sind
+        # das genauso viele wie insgesamt, ist jedes Element ein String.
+        # Der CASE-WHEN-Rahmen wie oben, aus demselben Grund.
+        CheckConstraint(
+            """
+            CASE
+                WHEN art <> 'frage' THEN true
+                WHEN jsonb_typeof(antworten) = 'array'
+                    THEN jsonb_array_length(antworten) = jsonb_array_length(
+                        jsonb_path_query_array(
+                            antworten, '$[*] ? (@.type() == "string")'))
+                ELSE false
+            END
+            """,
+            name="ck_karten_antworten_sind_texte",
+        ),
+        # Eine Antwortmoeglichkeit ohne sichtbaren Text ist auf der Karte
+        # ein leerer Knopf. Der Pfadausdruck sucht das Gegenteil des
+        # Erlaubten - ein Element, das ein String ist und kein einziges
+        # Zeichen ausserhalb der Leerzeichen enthaelt - und der Constraint
+        # verlangt, dass es kein solches gibt. Die Einschraenkung auf
+        # @.type() == "string" ist Absicht: Ein Element vom falschen Typ
+        # soll ausschliesslich ck_karten_antworten_sind_texte verletzen,
+        # damit der gemeldete Constraint-Name eindeutig sagt, was los ist -
+        # PostgreSQL garantiert keine Reihenfolge, in der Constraints
+        # geprueft werden.
+        CheckConstraint(
+            """
+            CASE
+                WHEN art <> 'frage' THEN true
+                WHEN jsonb_typeof(antworten) = 'array'
+                    THEN NOT jsonb_path_exists(
+                        antworten,
+                        '$[*] ? (@.type() == "string"'
+                        ' && !(@ like_regex "[^[:space:]]"))')
+                ELSE false
+            END
+            """,
+            name="ck_karten_antworten_nicht_leer",
         ),
         CheckConstraint(
             """
