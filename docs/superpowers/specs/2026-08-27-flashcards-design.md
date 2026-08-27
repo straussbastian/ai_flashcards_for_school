@@ -358,7 +358,7 @@ Coolify zieht sich das Repository eigenständig per CI/CD. Einzurichten ist dort
 
 **OAuth ist der fehleranfälligste Teil.** Discovery, exakte `resource`-Übereinstimmung und PKCE müssen stimmen, sonst meldet Claude nur „Couldn't reach the MCP server". Deshalb wird OAuth als eigenes Implementierungspaket gebaut und vollständig getestet, bevor die Werkzeuge dazukommen.
 
-**Der Volume-Mount** ist der einzige Weg, wie Daten verloren gehen können. Abgefangen durch den Startcheck und den nächtlichen Dump.
+**Der Volume-Mount** ist der einzige Weg, wie Daten verloren gehen können. Den fehlenden Mount fängt der Startcheck ab: Ohne Volume auf `/data` startet der Container gar nicht erst. Einen nächtlichen Dump bringt die Anwendung bewusst **nicht** mit – alles Sicherungswürdige liegt unter `/data`, und für Sicherungen ist die Betriebsebene zuständig (Snapshots des Volumes in Coolify bzw. auf dem Host). Das Restrisiko bleibt damit: Ein Volume, das zwar gemountet, aber nirgends gesichert wird, überlebt keinen Plattenschaden.
 
 **Die Lösungen stehen im Seitenquelltext.** Bewusst akzeptiert: Es gibt keine Noten, die Seite dient dem Üben. Wer den Quelltext liest, betrügt sich selbst.
 

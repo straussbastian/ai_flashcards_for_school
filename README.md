@@ -22,6 +22,20 @@ Damit ist auch die Sicherung geklärt: Alles Sicherungswürdige liegt unter
 `/data`; wer dieses Volume sichert, hat alles. Die Anwendung selbst bringt
 deshalb keine Backup-Funktion mit.
 
+### Die Hintertür: `ALLOW_EPHEMERAL_DATA`
+
+`ALLOW_EPHEMERAL_DATA=1` schaltet genau diese Prüfung ab. Der Container startet
+dann auch ohne Volume und schreibt die Datenbank in seine eigene, flüchtige
+Schicht: **Beim nächsten Stoppen sind alle Lernseiten weg.**
+
+Die Variable ist ausschließlich zum kurzen Ausprobieren gedacht – etwa
+`docker run` ohne Volume, nur um zu sehen, ob das Image überhaupt hochkommt.
+**Im Betrieb hat sie nichts zu suchen.** Wer sie einmal in Coolify setzt und
+dort stehen lässt, verliert die wichtigste Schutzprüfung dieses Projekts
+dauerhaft und unsichtbar: Der Container startet weiterhin, meldet sich gesund,
+und der Datenverlust fällt erst beim nächsten Deployment auf. Ein einzeiliges
+`WARNUNG:` im Log ist alles, was dann noch daran erinnert.
+
 ## Den Container lokal betreiben
 
 ```bash
@@ -52,11 +66,17 @@ Für die Arbeit am Code läuft die Datenbank außerhalb des Containers, über
 ```bash
 uv sync
 docker compose -f compose.dev.yml up -d
-cp .env.example .env          # Werte anpassen, Port 55432
+cp .env.example .env          # DATABASE_URL auf Port 55432 umstellen
 set -a; . ./.env; set +a
 uv run alembic upgrade head
 uv run uvicorn app.main:app --reload
 ```
+
+`TEST_DATABASE_URL` steht in `.env.example` bereits auf den Werten von
+`compose.dev.yml` (Port 55432, Passwort `entwicklung`) und muss nicht
+angefasst werden. Anzupassen ist nur `DATABASE_URL`: Der Beispielwert dort
+beschreibt den Betrieb – Datenbank im selben Container, Port 5432 –, für die
+Entwicklung zeigt sie auf `localhost:55432` mit dem Passwort `entwicklung`.
 
 Tests (die Testdatenbank wird einmalig angelegt):
 

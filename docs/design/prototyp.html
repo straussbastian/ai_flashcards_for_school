@@ -561,6 +561,32 @@
     return kopie;
   };
 
+  /* ==========================================================================
+     ACHTUNG, HIER WEICHT DER PROTOTYP VON DER ECHTEN SEITE AB
+     ==========================================================================
+     Alle Karteninhalte unten werden als KLARTEXT gesetzt (textContent bzw.
+     createTextNode). Das ist Absicht: Der Prototyp rendert kein Markdown, er
+     zeigt nur die Bedienung.
+
+     Die echte Lernseite setzt an genau diesen Stellen HTML ein (innerHTML
+     bzw. serverseitig gerendertes Markup): Laut Spec steckt das Bundle als
+     JSON im Dokument und ist zu diesem Zeitpunkt bereits von Markdown zu
+     gesaeubertem HTML gerendert.
+
+     Betroffen sind: BUNDLE.beschreibung, k.vorderseite, k.rueckseite,
+     k.erklaerung und die Antworttexte (antwort.text bzw. k.gemischte[...]
+     .text) - siehe die Markierungen "MARKDOWN-STELLE" weiter unten.
+
+     Die Regel fuer Plan 3, ohne Ausnahme:
+     Dieses HTML kommt AUSSCHLIESSLICH aus app/markdown.rendern(). Niemals
+     ungeprueft aus der Datenbank, niemals aus einem anderen Weg. rendern()
+     ist die einzige Verteidigungslinie zwischen dem, was die Lehrkraft (oder
+     ein Agent in ihrem Namen) schreibt, und dem, was im Browser der
+     Lernenden ausgefuehrt wird: markdown-it rendert, nh3 saeubert auf die
+     Liste erlaubter Tags. Wer hier an rendern() vorbei HTML einsetzt, baut
+     ein Cross-Site-Scripting ein.
+     ========================================================================== */
+
   const knoten = (tag, klasse, text) => {
     const el = document.createElement(tag);
     if (klasse) el.className = klasse;
@@ -675,6 +701,8 @@
     s.append(
       knoten("span", "klasse", BUNDLE.klasse),
       knoten("h1", "titel", BUNDLE.titel),
+      // MARKDOWN-STELLE: hier Klartext, in der echten Seite gesaeubertes
+      // HTML aus app/markdown.rendern(). Siehe der Hinweis bei knoten().
       knoten("p", "beschreibung", BUNDLE.beschreibung)
     );
 
@@ -705,6 +733,8 @@
     const vorn = seiteBauen();
     vorn.append(
       knoten("span", "augenbraue", k.art === "frage" ? "Frage" : "Lernkarte"),
+      // MARKDOWN-STELLE: hier Klartext, in der echten Seite gesaeubertes
+      // HTML aus app/markdown.rendern(). Siehe der Hinweis bei knoten().
       knoten("p", "frage", k.vorderseite)
     );
 
@@ -713,6 +743,8 @@
       k.gemischte.forEach((antwort, i) => {
         const b = knoten("button", "antwort");
         b.type = "button";
+        // MARKDOWN-STELLE: hier Klartext, in der echten Seite gesaeubertes
+        // HTML aus app/markdown.rendern(). Siehe der Hinweis bei knoten().
         b.append(knoten("span", "taste", BUCHSTABEN[i]), document.createTextNode(antwort.text));
         b.addEventListener("click", () => antworten(i));
         liste.append(b);
@@ -732,6 +764,9 @@
     if (k.art === "frage") {
       const richtig = k.gewaehlt === k.richtige_position;
       hinten.append(knoten("p", `urteil ${richtig ? "ja" : "nein"}`, richtig ? "Richtig!" : "Leider falsch"));
+      // MARKDOWN-STELLE (die drei folgenden Bloecke): Antworttexte und
+      // Erklaerung stehen hier als Klartext; in der echten Seite ist das
+      // gesaeubertes HTML aus app/markdown.rendern(). Siehe knoten().
       const loesung = knoten("p", "loesung");
       if (!richtig && k.gewaehlt !== null) {
         loesung.append(knoten("span", "deine", `Deine Antwort: ${k.gemischte[k.gewaehlt].text}`), knoten("br"));
@@ -740,6 +775,8 @@
       hinten.append(loesung);
       if (k.erklaerung) hinten.append(knoten("p", "erklaerung", k.erklaerung));
     } else {
+      // MARKDOWN-STELLE: hier Klartext, in der echten Seite gesaeubertes
+      // HTML aus app/markdown.rendern(). Siehe der Hinweis bei knoten().
       hinten.append(knoten("span", "augenbraue", "Antwort"), knoten("p", "loesung", k.rueckseite));
       if (BUNDLE.selbsteinschaetzung && k.gewusst === null) {
         const wahl = knoten("div", "selbsteinschaetzung");
@@ -799,6 +836,9 @@
     if (daneben.length) {
       const liste = knoten("div", "fehlerliste");
       daneben.forEach((k) => {
+        // MARKDOWN-STELLE (dieser Eintrag): Vorderseite, Antworttexte und
+        // Rueckseite stehen hier als Klartext; in der echten Seite ist das
+        // gesaeubertes HTML aus app/markdown.rendern(). Siehe knoten().
         const eintrag = knoten("div", "fehler");
         eintrag.append(document.createTextNode(k.vorderseite), knoten("br"));
         if (k.art === "frage") {

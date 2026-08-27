@@ -3,6 +3,11 @@
 .env
 .env.*
 .superpowers
+# run-local.sh legt ./daten als Volume an; darin liegt danach das
+# PostgreSQL-Cluster mit Modus 700. Ohne diese Zeile wanderte beim zweiten
+# Lauf das komplette Cluster in den Build-Kontext - auf einem Linux-Host
+# scheitert das an den Rechten. .gitignore kennt daten/ bereits.
+daten
 docs
 tests
 compose.dev.yml
