@@ -1,26 +1,77 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-echo "Warte auf PostgreSQL ..."
-for _ in $(seq 1 60); do
-    if pg_isready -h localhost -q; then break; fi
-    sleep 1
-done
-pg_isready -h localhost -q || { echo "PostgreSQL ist nicht hochgekommen." >&2; exit 1; }
+# Gewartet wird auf die Bedingung, die wirklich zaehlt: eine echte Verbindung
+# mit den Zugangsdaten der Anwendung (DATABASE_URL). Das deckt alles ab, was
+# vorher einzeln geprueft wurde - Server oben, Rolle da, Datenbank da,
+# Passwort passend - und haengt an keinem Hilfszustand ausserhalb der
+# Datenbank.
+#
+# Damit faellt auch auf, wenn db-init.sh scheitert: Frueher war das eine
+# reine Logzeile ohne Wirkung, die App lief mit dem alten Passwort weiter und
+# der Passwortabgleich war still ausgefallen. Und es fangt den Fall ab, dass
+# supervisord die App zwar nach db-init startet (priority), aber nicht auf
+# deren Ende wartet - bei einer Passwortrotation kann Alembic sonst mit dem
+# neuen Passwort verbinden wollen, bevor ALTER ROLE durch ist.
+echo "Warte auf die Datenbank (Verbindung mit den Zugangsdaten der Anwendung) ..."
+python - <<'PY'
+import sys
+import time
 
-# Rolle und Datenbank werden von db-init.sh angelegt, das als OS-Benutzer
-# postgres laeuft. Dieser Prozess hier laeuft als unprivilegierter Benutzer
-# app (siehe supervisord.conf) und kann kein su postgres mehr - deshalb nur
-# warten, bis die Markierungsdatei aus dem Erststart verschwunden ist.
-echo "Warte auf Rollen-/Datenbankanlage ..."
-for _ in $(seq 1 60); do
-    [ -f /data/.cluster-neu ] || break
-    sleep 1
-done
-if [ -f /data/.cluster-neu ]; then
-    echo "Rolle/Datenbank wurden nicht rechtzeitig angelegt." >&2
-    exit 1
-fi
+from sqlalchemy import create_engine, text
+
+try:
+    from app.config import get_settings
+
+    url = get_settings().database_url
+except Exception as fehler:  # noqa: BLE001
+    print("FEHLER: Die Konfiguration konnte nicht gelesen werden.", file=sys.stderr)
+    print(f"Grund: {type(fehler).__name__}: {fehler}", file=sys.stderr)
+    print(
+        "Pruefe DATABASE_URL, APP_SECRET, TEACHER_PASSWORD und BASE_URL.",
+        file=sys.stderr,
+    )
+    sys.exit(1)
+
+FRIST_SEKUNDEN = 90
+ende = time.monotonic() + FRIST_SEKUNDEN
+letzter_fehler = None
+
+while True:
+    maschine = create_engine(url, connect_args={"connect_timeout": 3})
+    try:
+        with maschine.connect() as verbindung:
+            verbindung.execute(text("SELECT 1"))
+        print("Datenbank ist erreichbar.")
+        sys.exit(0)
+    except Exception as fehler:  # noqa: BLE001
+        letzter_fehler = fehler
+    finally:
+        maschine.dispose()
+    if time.monotonic() >= ende:
+        break
+    time.sleep(1)
+
+print(
+    f"FEHLER: Nach {FRIST_SEKUNDEN} Sekunden keine Verbindung zur Datenbank.",
+    file=sys.stderr,
+)
+print("", file=sys.stderr)
+print("Wahrscheinliche Gruende:", file=sys.stderr)
+print("  - PostgreSQL im Container ist nicht hochgekommen", file=sys.stderr)
+print(
+    "  - Rolle oder Datenbank 'flashcards' fehlen (db-init.sh hat nicht "
+    "durchgelaufen - siehe dessen Meldungen weiter oben im Log)",
+    file=sys.stderr,
+)
+print(
+    "  - das Passwort in DATABASE_URL passt nicht zu POSTGRES_PASSWORD",
+    file=sys.stderr,
+)
+print("", file=sys.stderr)
+print(f"Letzter Fehler: {type(letzter_fehler).__name__}: {letzter_fehler}", file=sys.stderr)
+sys.exit(1)
+PY
 
 echo "Fuehre Migrationen aus."
 alembic upgrade head

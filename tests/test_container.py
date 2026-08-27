@@ -1,5 +1,6 @@
 import json
 import shutil
+import socket
 import subprocess
 import time
 import urllib.error
@@ -15,16 +16,34 @@ pytestmark = pytest.mark.skipif(
 # Eindeutig statt fest, damit parallele/vorherige Laeufe sich nicht in die
 # Quere kommen; die Fixture raeumt das Image am Ende wieder auf.
 IMAGE = f"flashcards-container-test-{uuid.uuid4().hex[:8]}"
-PORT = 18000
+
+# Jeder docker-Aufruf bekommt eine Obergrenze: Ein haengender Aufruf ohne
+# timeout wuerde die gesamte Suite unbegrenzt blockieren, statt rot zu
+# werden. Der Build darf laenger brauchen als der Rest.
+ZEITGRENZE = 120
+ZEITGRENZE_BUILD = 900
 
 
-def _laufen(*befehl: str, pruefen: bool = True) -> subprocess.CompletedProcess:
-    return subprocess.run(befehl, capture_output=True, text=True, check=pruefen)
+def _laufen(
+    *befehl: str, pruefen: bool = True, zeitgrenze: int = ZEITGRENZE
+) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        befehl, capture_output=True, text=True, check=pruefen, timeout=zeitgrenze
+    )
+
+
+def _freier_port() -> int:
+    # Einen festen Port zu belegen laesst den Test scheitern, sobald auf der
+    # Maschine schon irgendetwas darauf lauscht (oder ein zweiter Lauf
+    # parallel laeuft). Das Betriebssystem einen freien nennen lassen.
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as buchse:
+        buchse.bind(("127.0.0.1", 0))
+        return buchse.getsockname()[1]
 
 
 @pytest.fixture(scope="module")
 def image():
-    _laufen("docker", "build", "-t", IMAGE, ".")
+    _laufen("docker", "build", "-t", IMAGE, ".", zeitgrenze=ZEITGRENZE_BUILD)
     yield IMAGE
     _laufen("docker", "rmi", "-f", IMAGE, pruefen=False)
 
@@ -65,6 +84,7 @@ def _warten_bis_gesund(port: int, name: str) -> dict:
 def test_mit_volume_wird_die_seite_erreichbar_und_daten_ueberleben(image, tmp_path):
     volume = tmp_path / "daten"
     volume.mkdir()
+    port = _freier_port()
 
     def starten(name: str) -> None:
         _laufen(
@@ -75,7 +95,7 @@ def test_mit_volume_wird_die_seite_erreichbar_und_daten_ueberleben(image, tmp_pa
             "-e", "APP_SECRET=test",
             "-e", "TEACHER_PASSWORD=test",
             "-e", "BASE_URL=http://localhost:8000",
-            "-p", f"{PORT}:8000",
+            "-p", f"{port}:8000",
             image,
         )
 
@@ -94,7 +114,7 @@ def test_mit_volume_wird_die_seite_erreichbar_und_daten_ueberleben(image, tmp_pa
     name_1 = f"flashcards-{uuid.uuid4().hex[:8]}"
     try:
         starten(name_1)
-        gesundheit = _warten_bis_gesund(PORT, name_1)
+        gesundheit = _warten_bis_gesund(port, name_1)
         assert gesundheit["status"] == "ok"
         assert gesundheit["datenbank"] == "ok"
 
@@ -114,7 +134,7 @@ def test_mit_volume_wird_die_seite_erreichbar_und_daten_ueberleben(image, tmp_pa
         name_2 = f"flashcards-{uuid.uuid4().hex[:8]}"
         try:
             starten(name_2)
-            _warten_bis_gesund(PORT, name_2)
+            _warten_bis_gesund(port, name_2)
             zaehlung = _laufen(
                 "docker", "exec", name_2, "psql", "-U", "flashcards", "-d", "flashcards",
                 "-tAc", "SELECT count(*) FROM bundles WHERE slug = 'rote-katze-springt'",

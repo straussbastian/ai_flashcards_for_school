@@ -26,7 +26,11 @@ if [ ! -s "$PGDATA/PG_VERSION" ]; then
     echo "Erststart: Datenbank-Cluster wird angelegt."
     su postgres -c "initdb -D '$PGDATA' --encoding=UTF8 --locale=C.UTF-8 --auth-local=trust --auth-host=scram-sha-256"
     echo "listen_addresses = 'localhost'" >> "$PGDATA/postgresql.conf"
-    touch /data/.cluster-neu
 fi
+
+# Bewusst KEINE Markierungsdatei fuer "Cluster ist neu": Sie waere Zustand
+# ausserhalb der Datenbank, der mit der Datenbank synchron gehalten werden
+# muesste. db-init.sh fragt stattdessen den Cluster selbst (pg_roles,
+# pg_database) und darf deshalb bei jedem Start unveraendert durchlaufen.
 
 exec supervisord -c /app/docker/supervisord.conf
