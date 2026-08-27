@@ -521,3 +521,21 @@ body::before {
   overflow-y: auto;
   overflow-x: auto;
 }
+
+/* Dazu gehoert zwingend das "safe". Die Rueckseite zentriert ihren
+   Inhalt (justify-content und align-items: center, beides aus dem
+   Prototyp). Zentrierter Flex-Inhalt, der laenger ist als sein Kasten,
+   ragt nach BEIDEN Seiten hinaus - und was vor dem Anfang des
+   Scrollbereichs liegt, ist mit keiner Geste mehr erreichbar.
+   Nachgemessen: Die Ueberschrift "Antwort" stand bei scrollTop = 0
+   336 px ueber dem oberen Zettelrand, also unwiederbringlich fort. Erst
+   mit dem Ueberlauf oben faellt das auf; vorher lief der Inhalt einfach
+   sichtbar aus der Karte heraus.
+
+   "safe" schaltet die Zentrierung genau dann auf den Anfang um, wenn
+   der Inhalt ueberlaeuft. Passt er - also bei jeder kurzen Karte -, ist
+   es unveraendert center, Pixel fuer Pixel. */
+.seite.rueckseite {
+  justify-content: safe center;
+  align-items: safe center;
+}

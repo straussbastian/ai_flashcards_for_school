@@ -619,7 +619,13 @@
     // alsText(): Die Rueckseite ist HTML; die Sprachausgabe soll den
     // Text hoeren, nicht das Markup.
     ansagen(`Antwort: ${alsText(k.rueckseite)}`);
-    setTimeout(() => $("karte").querySelector(".rueckseite button")?.focus(), 300);
+    /* preventScroll gehoert hier dazu: Der Knopf steht am Ende der
+       Rueckseite. Ohne diesen Zusatz scrollt der Browser ihn beim
+       Fokussieren in den Blick - bei einer langen Antwort saehe die
+       Lernende zuerst deren Ende. Der Fokus wandert trotzdem, die Taste
+       A wirkt trotzdem; nur der Blick bleibt am Anfang der Antwort.
+       antworten() macht es an derselben Stelle genauso. */
+    setTimeout(() => $("karte").querySelector(".rueckseite button")?.focus({ preventScroll: true }), 300);
   };
 
   const einschaetzen = (gewusst) => {
