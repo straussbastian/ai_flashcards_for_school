@@ -1,0 +1,12 @@
+.git
+.venv
+.env
+.env.*
+.superpowers
+docs
+tests
+compose.dev.yml
+__pycache__
+*.pyc
+.pytest_cache
+.ruff_cache
