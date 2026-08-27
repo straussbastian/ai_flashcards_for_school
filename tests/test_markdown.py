@@ -86,16 +86,32 @@ def test_text_ueber_grenze_loest_ausnahme_aus():
     assert "Zeichen" in fehler_text or "lang" in fehler_text.lower()
 
 
-def test_tief_verschachteltes_markdown_an_grenze_ist_schnell():
-    """Tief verschachtelte Listen sollten schnell fehlschlagen, nicht lange rechnen."""
-    # Erzeuge tief verschachtelte Listen nahe der Grenze
-    # Jede Ebene: "- " (2 Zeichen) + Text (~20) + Newline (1) ≈ 24 Zeichen pro Ebene
-    # Bei 5000 Zeichen: ~200 Ebenen möglich
-    # Wir bauen etwas, das ohne die Grenze superlinear wäre
-    verschachtelte_liste = ""
-    for i in range(250):
-        verschachtelte_liste += ("  " * i) + f"- Ebene {i}\n"
+def test_tief_verschachteltes_markdown_unter_grenze_ist_schnell():
+    """Maximal verschachtelte Eingabe unter 5000 Zeichen wird schnell gerendert.
 
-    # Sollte schnell fehlschlagen, nicht ewig rechnen
-    with pytest.raises(MarkdownZuLang):
-        rendern(verschachtelte_liste)
+    Der schlechteste gemessene Fall (öffnende Klammern) braucht ~35 ms.
+    Wir setzen die Zeitschranke auf 200 ms, um echte Regressionen zu fangen
+    und falsche Positivs auf langsamen CI-Rechnern zu vermeiden.
+    """
+    import time
+
+    # Erzeuge pathologischen Fall: 4990 öffnende Klammern
+    # Dieser Fall ist unter der Grenze und maximal verschachtelt.
+    # Gemessene Zeit: ~35 ms (schlechtester Fall im Testlauf)
+    text = "[" * 4990
+
+    # Prüfe die Zeichenzahl
+    assert len(text) == 4990
+    assert len(text) < 5000
+
+    # Messe die Rendering-Zeit
+    start = time.perf_counter()
+    result = rendern(text)
+    elapsed_ms = (time.perf_counter() - start) * 1000
+
+    # Assertiere, dass das Rendern unter 200 ms dauert
+    # (Reserve von ~5,7× über dem gemessenen Schlechtfall von 35 ms)
+    assert elapsed_ms < 200, (
+        f"Rendering von 4990-Zeichen-Text dauerte {elapsed_ms:.2f} ms, "
+        f"erwartet unter 200 ms"
+    )
