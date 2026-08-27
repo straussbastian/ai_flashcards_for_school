@@ -1,0 +1,968 @@
+<title>Lernkarten-Prototyp</title>
+
+<style>
+  /* ------------------------------------------------------------------
+     Prototyp der Lernseite. Beispielinhalte fest eingebaut, keine
+     Datenbank, kein MCP. Farbwerte, Winkel, Schatten und die Dauer der
+     Umklapp-Animation stammen woertlich aus der freigegebenen Spec
+     (docs/superpowers/specs/2026-08-27-flashcards-design.md, Abschnitt 6).
+     Schrift bewusst system-ui: die echte Seite soll keine Webfont-
+     Abhaengigkeit haben.
+     ------------------------------------------------------------------ */
+
+  :root {
+    --tafel-oben:   #2a3138;
+    --tafel-unten:  #16191d;
+    --raster:       rgba(255, 255, 255, .028);
+
+    --zettel-vorn:  linear-gradient(158deg, #ffe57a 0%, #ffd23f 100%);
+    --zettel-hinten: linear-gradient(158deg, #ffdf6b 0%, #f7c62f 100%);
+    --zettel-stapel-1: #e9bf3a;
+    --zettel-stapel-2: #f0cd52;
+    --tinte:        #2b2410;
+
+    --richtig:      #2f9e52;
+    --richtig-rand: #257e41;
+    --falsch:       #d1392f;
+    --falsch-rand:  #a72d25;
+
+    --spur:         #2c343c;
+    --fuellung:     #ffd23f;
+    --gedaempft:    #7b8996;
+    --gedaempft-hell: #aebac6;
+
+    --schatten:     0 18px 32px rgba(0, 0, 0, .55);
+    --umklappen:    .55s cubic-bezier(.2, .7, .3, 1);
+
+    --schrift: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    min-height: 100dvh;
+    background:
+      radial-gradient(120% 90% at 50% 0%, var(--tafel-oben) 0%, var(--tafel-unten) 70%),
+      var(--tafel-unten);
+    color: var(--gedaempft-hell);
+    font-family: var(--schrift);
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+
+  /* Das feine Raster der Tafel. */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    background-image:
+      linear-gradient(var(--raster) 1px, transparent 1px),
+      linear-gradient(90deg, var(--raster) 1px, transparent 1px);
+    background-size: 22px 22px;
+  }
+
+  .buehne {
+    position: relative;
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    max-width: 46rem;
+    margin: 0 auto;
+    padding: 0 1rem;
+  }
+
+  /* ===================== Kopfzeile ===================== */
+
+  .kopf {
+    flex: none;
+    padding: 1rem .25rem .75rem;
+    display: flex;
+    flex-direction: column;
+    gap: .5rem;
+  }
+  .kopf[hidden] { display: none; }
+
+  .kopf-zeile {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    font-size: .8rem;
+    color: var(--gedaempft);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .balken {
+    height: 3px;
+    background: var(--spur);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .balken span {
+    display: block;
+    height: 100%;
+    width: 0;
+    background: var(--fuellung);
+    transition: width .3s ease;
+  }
+
+  .beenden {
+    background: none;
+    border: none;
+    color: var(--gedaempft);
+    font: inherit;
+    font-size: .8rem;
+    cursor: pointer;
+    padding: .25rem .4rem;
+    border-radius: 6px;
+  }
+  .beenden:hover { color: var(--gedaempft-hell); }
+
+  /* ===================== Buehnenmitte ===================== */
+
+  .mitte {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem 0;
+    min-height: 0;
+  }
+
+  /* ===================== Der Zettel ===================== */
+
+  .stapel {
+    position: relative;
+    width: 100%;
+    max-width: 34rem;
+  }
+
+  .geist {
+    position: absolute;
+    inset: 0;
+    border-radius: 3px 3px 6px 6px;
+    box-shadow: 0 10px 20px rgba(0, 0, 0, .45);
+  }
+  .geist-1 { background: var(--zettel-stapel-1); transform: rotate(-2.2deg) translate(-7px, 7px); }
+  .geist-2 { background: var(--zettel-stapel-2); transform: rotate(1.2deg) translate(4px, 3px); }
+  .geist[hidden] { display: none; }
+
+  .karte {
+    position: relative;
+    perspective: 1400px;
+  }
+  /* Nur Ankerpunkt fuer die Tabulatorreihenfolge, kein sichtbarer Ring. */
+  .karte:focus { outline: none; }
+
+  .karte-innen {
+    position: relative;
+    transition: transform var(--umklappen);
+    transform-style: preserve-3d;
+  }
+  .karte.gedreht .karte-innen { transform: rotateY(180deg); }
+  .karte.ohne-animation .karte-innen { transition: none; }
+
+  .seite {
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+    border-radius: 3px 3px 6px 6px;
+    background: var(--zettel-vorn);
+    color: var(--tinte);
+    box-shadow: var(--schatten);
+    padding: 1.5rem 1.4rem 1.3rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    min-height: 20rem;
+  }
+  .seite.rueckseite {
+    position: absolute;
+    inset: 0;
+    transform: rotateY(180deg);
+    background: var(--zettel-hinten);
+  }
+
+  .augenbraue {
+    font-size: .65rem;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    opacity: .5;
+    font-weight: 600;
+  }
+
+  .frage {
+    font-size: 1.25rem;
+    line-height: 1.35;
+    font-weight: 650;
+    text-wrap: balance;
+    margin: 0;
+  }
+  .frage :is(ul, ol) { margin: .5rem 0 0; padding-left: 1.2rem; font-weight: 500; font-size: 1.05rem; }
+  .frage li + li { margin-top: .2rem; }
+
+  .hinweis {
+    margin-top: auto;
+    font-size: .7rem;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+    opacity: .45;
+  }
+
+  /* --------- Antworten --------- */
+
+  .antworten {
+    margin-top: auto;
+    display: flex;
+    flex-direction: column;
+    gap: .5rem;
+  }
+
+  .antwort {
+    display: flex;
+    align-items: center;
+    gap: .65rem;
+    width: 100%;
+    min-height: 2.75rem;
+    padding: .6rem .75rem;
+    border: 1.5px solid transparent;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, .42);
+    color: inherit;
+    font: inherit;
+    font-size: .95rem;
+    text-align: left;
+    cursor: pointer;
+    transition: background .15s ease, transform .1s ease;
+  }
+  .antwort:hover:not(:disabled) { background: rgba(255, 255, 255, .72); }
+  .antwort:active:not(:disabled) { transform: translateY(1px); }
+  .antwort:disabled { cursor: default; }
+  .antwort:focus-visible { outline: 3px solid var(--tinte); outline-offset: 2px; }
+
+  .taste {
+    flex: none;
+    width: 1.4rem;
+    height: 1.4rem;
+    display: grid;
+    place-items: center;
+    border-radius: 5px;
+    background: rgba(43, 36, 16, .14);
+    font-size: .7rem;
+    font-weight: 700;
+  }
+
+  /* --------- Rueckseite: Aufloesung --------- */
+
+  .rueckseite { align-items: center; justify-content: center; text-align: center; }
+
+  .urteil { font-size: 1.65rem; font-weight: 800; margin: 0; }
+  .urteil.ja { color: #1d7a3c; }
+  .urteil.nein { color: #b3271e; }
+
+  .loesung { font-size: 1.05rem; line-height: 1.45; margin: 0; }
+  .loesung .deine { opacity: .65; }
+  .loesung strong { font-size: 1.15rem; }
+
+  .erklaerung {
+    font-size: .85rem;
+    line-height: 1.5;
+    opacity: .72;
+    max-width: 26rem;
+    margin: 0;
+  }
+
+  /* --------- Knoepfe auf dem Zettel --------- */
+
+  .knopf {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: .55rem;
+    border: none;
+    border-radius: 8px;
+    padding: .7rem 1.1rem;
+    font: inherit;
+    font-size: .9rem;
+    font-weight: 600;
+    cursor: pointer;
+    background: var(--tinte);
+    color: #ffd23f;
+    transition: transform .1s ease, opacity .15s ease;
+  }
+  /* Tastenkuerzel auf dunklem Knopf braucht eine hellere Plakette als auf dem Zettel. */
+  .knopf .taste { background: rgba(255, 255, 255, .2); color: inherit; }
+  .knopf.leise .taste { background: rgba(43, 36, 16, .16); }
+  .knopf:hover { opacity: .88; }
+  .knopf:active { transform: translateY(1px); }
+  .knopf:focus-visible { outline: 3px solid var(--tinte); outline-offset: 3px; }
+  .knopf.leise { background: rgba(43, 36, 16, .12); color: var(--tinte); }
+
+  .selbsteinschaetzung { display: flex; gap: .5rem; flex-wrap: wrap; justify-content: center; }
+
+  /* ===================== Fusszeile ===================== */
+
+  .fuss {
+    flex: none;
+    padding: .75rem .25rem 1.25rem;
+    display: flex;
+    gap: .6rem;
+  }
+  .fuss[hidden] { display: none; }
+
+  .navi {
+    flex: 1;
+    min-height: 3rem;
+    border: none;
+    border-radius: 10px;
+    background: #262f38;
+    color: #c6d0da;
+    font: inherit;
+    font-size: .95rem;
+    cursor: pointer;
+    transition: background .15s ease;
+  }
+  .navi:hover:not(:disabled) { background: #303b46; }
+  .navi:disabled { opacity: .35; cursor: default; }
+  .navi:focus-visible { outline: 3px solid var(--fuellung); outline-offset: 2px; }
+
+  .tastenleiste {
+    display: none;
+    text-align: center;
+    font-size: .72rem;
+    color: #6f7c89;
+    padding-bottom: 1.25rem;
+    letter-spacing: .02em;
+  }
+
+  /* Zeigegeraet mit Hover, also Rechner: Tastenleiste statt Balken. */
+  @media (hover: hover) and (pointer: fine) {
+    .fuss { display: none; }
+    .tastenleiste { display: block; }
+  }
+
+  /* ===================== Startseite ===================== */
+
+  .klasse {
+    align-self: flex-start;
+    font-size: .68rem;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    font-weight: 700;
+    background: rgba(43, 36, 16, .16);
+    padding: .3rem .7rem;
+    border-radius: 20px;
+  }
+
+  .titel { font-size: 1.7rem; line-height: 1.15; font-weight: 800; margin: 0; text-wrap: balance; }
+  .beschreibung { font-size: .95rem; line-height: 1.5; opacity: .78; margin: 0; }
+
+  .zusammensetzung {
+    display: flex;
+    gap: 1.5rem;
+    font-size: .78rem;
+    opacity: .7;
+    font-variant-numeric: tabular-nums;
+  }
+  .zusammensetzung b { display: block; font-size: 1.3rem; opacity: 1; }
+
+  /* ===================== Ergebnis ===================== */
+
+  .punktzahl { font-size: 3.4rem; font-weight: 850; line-height: 1; margin: 0; font-variant-numeric: tabular-nums; }
+  .punktzahl small { font-size: 1.15rem; font-weight: 650; opacity: .5; }
+
+  .fazit { font-size: 1.05rem; font-weight: 650; margin: 0; }
+
+  .aufschluesselung { display: flex; gap: .6rem; width: 100%; }
+  .kachel {
+    flex: 1;
+    background: rgba(255, 255, 255, .42);
+    border-radius: 9px;
+    padding: .6rem .7rem;
+    font-size: .72rem;
+    text-align: left;
+    font-variant-numeric: tabular-nums;
+  }
+  .kachel b { display: block; font-size: 1.2rem; }
+  .kachel.gut b { color: #1d7a3c; }
+  .kachel.schlecht b { color: #b3271e; }
+
+  .fehlerliste {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: .4rem;
+    max-height: 11rem;
+    overflow-y: auto;
+    text-align: left;
+  }
+  .fehler {
+    background: rgba(255, 255, 255, .42);
+    border-left: 3px solid var(--falsch);
+    border-radius: 5px;
+    padding: .45rem .6rem;
+    font-size: .78rem;
+    line-height: 1.4;
+  }
+  .fehler i { font-style: normal; opacity: .6; }
+  .fehler b { color: #1d7a3c; }
+
+  .ergebnis-knoepfe { display: flex; gap: .5rem; width: 100%; flex-wrap: wrap; }
+  .ergebnis-knoepfe .knopf { flex: 1; min-width: 9rem; }
+
+  /* ===================== Kleine Schirme ===================== */
+
+  @media (max-width: 30rem) {
+    .buehne { padding: 0 .75rem; }
+    .seite { padding: 1.2rem 1.1rem 1.1rem; min-height: 17rem; }
+    .frage { font-size: 1.12rem; }
+    .titel { font-size: 1.45rem; }
+    .punktzahl { font-size: 2.9rem; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .karte-innen, .balken span, .antwort, .knopf, .navi { transition: none !important; }
+  }
+
+  .nur-fuer-screenreader {
+    position: absolute;
+    width: 1px; height: 1px;
+    padding: 0; margin: -1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .fussnote {
+    flex: none;
+    text-align: center;
+    font-size: .7rem;
+    color: #55616c;
+    padding: 0 0 1rem;
+    line-height: 1.5;
+  }
+</style>
+
+<div class="buehne">
+  <header class="kopf" id="kopf" hidden>
+    <div class="kopf-zeile">
+      <span id="fortschritt-text"></span>
+      <button class="beenden" id="beenden-knopf" type="button">beenden ✕</button>
+    </div>
+    <div class="balken"><span id="fortschritt-balken"></span></div>
+  </header>
+
+  <main class="mitte">
+    <div class="stapel">
+      <div class="geist geist-1" id="geist-1" hidden></div>
+      <div class="geist geist-2" id="geist-2" hidden></div>
+      <div class="karte" id="karte" tabindex="-1">
+        <div class="karte-innen" id="karte-innen"></div>
+      </div>
+    </div>
+  </main>
+
+  <p class="nur-fuer-screenreader" role="status" aria-live="polite" id="ansage"></p>
+
+  <footer class="fuss" id="fuss" hidden>
+    <button class="navi" id="zurueck" type="button">← zurück</button>
+    <button class="navi" id="weiter" type="button">weiter →</button>
+  </footer>
+
+  <p class="tastenleiste" id="tastenleiste"></p>
+
+  <p class="fussnote">
+    Prototyp mit Beispielinhalten – ohne Datenbank, ohne Anmeldung.<br>
+    Es wird nichts gespeichert: Neu laden heißt neu anfangen.
+  </p>
+</div>
+
+<script>
+(() => {
+  "use strict";
+
+  /* ==================================================================
+     Beispiel-Bundle. In der echten Seite kommt genau diese Struktur
+     aus der Datenbank – art, vorderseite, rueckseite, antworten,
+     richtige_index, erklaerung.
+     ================================================================== */
+
+  const BUNDLE = {
+    klasse: "Berufsschule · 2. Lehrjahr",
+    titel: "Arbeitsrecht kompakt",
+    beschreibung: "Erst sechs Karten zum Einprägen, dann sechs Fragen. Die Antworten werden bei jedem Durchlauf neu gemischt.",
+    selbsteinschaetzung: true,
+    karten: [
+      { art: "flashcard",
+        vorderseite: "Wie lange darf eine Probezeit im Arbeitsvertrag höchstens dauern?",
+        rueckseite: "Sechs Monate" },
+      { art: "flashcard",
+        vorderseite: "Welche Kündigungsfrist gilt während der Probezeit?",
+        rueckseite: "Zwei Wochen – zu jedem beliebigen Tag" },
+      { art: "flashcard",
+        vorderseite: "Wie viele Stunden darf die werktägliche Arbeitszeit regulär betragen?",
+        rueckseite: "Acht Stunden – ausnahmsweise bis zu zehn" },
+      { art: "flashcard",
+        vorderseite: "Wie lange muss die Ruhezeit zwischen zwei Arbeitstagen mindestens sein?",
+        rueckseite: "Elf Stunden ununterbrochen" },
+      { art: "flashcard",
+        vorderseite: "Was bedeutet „Aufhebungsvertrag“?",
+        rueckseite: "Beide Seiten beenden das Arbeitsverhältnis einvernehmlich – ohne Kündigung und ohne Fristen" },
+      { art: "flashcard",
+        vorderseite: "Wer gilt nach dem Jugendarbeitsschutzgesetz als Jugendlicher?",
+        rueckseite: "Wer 15 ist, aber noch nicht 18" },
+
+      { art: "frage",
+        vorderseite: "Wie viel Pause steht bei einer Arbeitszeit von mehr als sechs bis zu neun Stunden zu?",
+        antworten: ["15 Minuten", "30 Minuten", "45 Minuten", "60 Minuten"],
+        richtige_index: 1,
+        erklaerung: "Ab mehr als neun Stunden sind es 45 Minuten. Die Pause darf in Abschnitte von je mindestens 15 Minuten geteilt werden." },
+      { art: "frage",
+        vorderseite: "Wie hoch ist der gesetzliche Mindesturlaub bei einer Fünf-Tage-Woche?",
+        antworten: ["18 Tage", "20 Tage", "24 Tage", "30 Tage"],
+        richtige_index: 1,
+        erklaerung: "Das Gesetz nennt 24 Werktage bei einer Sechs-Tage-Woche. Umgerechnet auf fünf Tage sind das 20 Urlaubstage." },
+      { art: "frage",
+        vorderseite: "Welche Grundkündigungsfrist gilt für Arbeitnehmer nach der Probezeit?",
+        antworten: ["Eine Woche zum Monatsende", "Zwei Wochen zum Monatsende", "Vier Wochen zum 15. oder zum Monatsende", "Drei Monate zum Quartalsende"],
+        richtige_index: 2,
+        erklaerung: "Für den Arbeitgeber verlängert sich diese Frist mit der Dauer der Betriebszugehörigkeit – für den Arbeitnehmer bleibt sie gleich." },
+      { art: "frage",
+        vorderseite: "In welcher Form muss der Berufsausbildungsvertrag festgehalten werden?",
+        antworten: ["Mündlich genügt", "Der wesentliche Inhalt ist schriftlich niederzulegen", "Nur als E-Mail", "Gar nicht, er entsteht durch Arbeitsaufnahme"],
+        richtige_index: 1,
+        erklaerung: "Der Ausbildende hält den wesentlichen Inhalt vor Beginn der Ausbildung schriftlich fest – das ist Voraussetzung für die Eintragung bei der Kammer." },
+      { art: "frage",
+        vorderseite: "Wer trägt die Kosten für Werkzeuge und Materialien, die zur Ausbildung nötig sind?",
+        antworten: ["Der Auszubildende", "Der Ausbildungsbetrieb", "Die Berufsschule", "Die Krankenkasse"],
+        richtige_index: 1,
+        erklaerung: "Der Betrieb stellt kostenlos zur Verfügung, was für die Ausbildung und für Prüfungen gebraucht wird." },
+      { art: "frage",
+        vorderseite: "Was passiert mit dem Arbeitsverhältnis, wenn ein Betrieb den Besitzer wechselt?",
+        antworten: ["Es endet automatisch", "Es geht auf den neuen Inhaber über", "Es muss neu verhandelt werden", "Es ruht für sechs Monate"],
+        richtige_index: 1,
+        erklaerung: "Der neue Inhaber tritt in die bestehenden Arbeitsverhältnisse ein. Eine Kündigung allein wegen des Übergangs ist unwirksam." }
+    ]
+  };
+
+  /* ================== Hilfsmittel ================== */
+
+  const BUCHSTABEN = ["A", "B", "C", "D"];
+  const $ = (id) => document.getElementById(id);
+
+  const mischen = (liste) => {
+    const kopie = liste.slice();
+    for (let i = kopie.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [kopie[i], kopie[j]] = [kopie[j], kopie[i]];
+    }
+    return kopie;
+  };
+
+  const knoten = (tag, klasse, text) => {
+    const el = document.createElement(tag);
+    if (klasse) el.className = klasse;
+    if (text !== undefined) el.textContent = text;
+    return el;
+  };
+
+  // Jeder Knopf, der auch per Tastatur erreichbar ist, traegt sein Kuerzel
+  // sichtbar. Was man druecken kann, soll man auch sehen koennen.
+  const knopf = (klasse, taste, text, beiKlick) => {
+    const b = knoten("button", klasse);
+    b.type = "button";
+    if (taste) b.append(knoten("span", "taste", taste));
+    b.append(document.createTextNode(text));
+    b.addEventListener("click", beiKlick);
+    return b;
+  };
+
+  /* ================== Zustand ================== */
+
+  let lauf = null;      // { karten: [...], index: 0 }
+  let ansicht = "start"; // start | karte | ergebnis
+
+  const durchlaufBauen = (quelle) => {
+    const karten = mischen(quelle).map((k) => {
+      if (k.art === "flashcard") {
+        return { ...k, gewusst: null };
+      }
+      // Antworten mischen, die richtige Position mitwandern lassen.
+      const paare = mischen(k.antworten.map((text, i) => ({ text, richtig: i === k.richtige_index })));
+      return {
+        ...k,
+        gemischte: paare,
+        richtige_position: paare.findIndex((p) => p.richtig),
+        gewaehlt: null
+      };
+    });
+    return { karten, index: 0 };
+  };
+
+  const aktuelle = () => lauf.karten[lauf.index];
+  const beantwortet = (k) => (k.art === "flashcard" ? k.gewusst !== null : k.gewaehlt !== null);
+
+  const punkte = () => {
+    let erreicht = 0, moeglich = 0;
+    for (const k of lauf.karten) {
+      if (k.art === "frage") {
+        moeglich++;
+        if (k.gewaehlt === k.richtige_position) erreicht++;
+      } else if (BUNDLE.selbsteinschaetzung) {
+        moeglich++;
+        if (k.gewusst) erreicht++;
+      }
+    }
+    return { erreicht, moeglich };
+  };
+
+  const danebenGegangen = () =>
+    lauf.karten.filter((k) =>
+      k.art === "frage" ? k.gewaehlt !== null && k.gewaehlt !== k.richtige_position
+                        : k.gewusst === false);
+
+  const ansagen = (text) => { $("ansage").textContent = text; };
+
+  /* ================== Zeichnen ================== */
+
+  // Die Tastenleiste zeigt immer nur, was in genau diesem Moment geht.
+  // Eine Leiste, die Tasten nennt, die gerade nichts tun, erzieht dazu,
+  // sie nicht mehr zu lesen.
+  const tastenhinweis = () => {
+    if (ansicht === "start") return "Eingabetaste startet";
+    if (ansicht === "ergebnis") return "A nochmal · B nur die Fehler · Esc zur Startseite";
+    const k = aktuelle();
+    if (k.art === "frage") {
+      return k.gewaehlt === null
+        ? "A B C D wählen · ← → blättern · Esc beenden"
+        : "← → blättern · Esc beenden";
+    }
+    if (!k.aufgedeckt) return "Leertaste umdrehen · ← → blättern · Esc beenden";
+    if (BUNDLE.selbsteinschaetzung && k.gewusst === null)
+      return "A wusste ich · B wusste ich nicht · ← → blättern · Esc beenden";
+    return "← → blättern · Esc beenden";
+  };
+
+  const kopfUndFussSetzen = () => {
+    const imLauf = ansicht === "karte";
+    $("kopf").hidden = !imLauf;
+    $("fuss").hidden = !imLauf;
+    $("tastenleiste").textContent = tastenhinweis();
+
+    const geist1 = $("geist-1"), geist2 = $("geist-2");
+    const rest = imLauf ? lauf.karten.length - lauf.index - 1 : 0;
+    geist1.hidden = !(imLauf && rest >= 1);
+    geist2.hidden = !(imLauf && rest >= 2);
+
+    if (imLauf) {
+      $("fortschritt-text").textContent = `Karte ${lauf.index + 1} von ${lauf.karten.length}`;
+      $("fortschritt-balken").style.width = `${((lauf.index + 1) / lauf.karten.length) * 100}%`;
+      $("zurueck").disabled = lauf.index === 0;
+      $("weiter").textContent = lauf.index === lauf.karten.length - 1 ? "Ergebnis →" : "weiter →";
+    }
+  };
+
+  const seiteBauen = (klasse) => knoten("div", `seite ${klasse || ""}`.trim());
+
+  const zeichneStart = () => {
+    ansicht = "start";
+    const flashcards = BUNDLE.karten.filter((k) => k.art === "flashcard").length;
+    const fragen = BUNDLE.karten.length - flashcards;
+
+    const s = seiteBauen();
+    s.append(
+      knoten("span", "klasse", BUNDLE.klasse),
+      knoten("h1", "titel", BUNDLE.titel),
+      knoten("p", "beschreibung", BUNDLE.beschreibung)
+    );
+
+    const zusammen = knoten("div", "zusammensetzung");
+    [[BUNDLE.karten.length, "Karten"], [flashcards, "zum Lernen"], [fragen, "Fragen"]]
+      .forEach(([zahl, was]) => {
+        const sp = knoten("span");
+        sp.append(knoten("b", null, String(zahl)), document.createTextNode(was));
+        zusammen.append(sp);
+      });
+    s.append(zusammen);
+
+    const start = knopf("knopf", null, "Los geht's →", () => starten(BUNDLE.karten));
+    start.style.marginTop = "auto";
+    start.style.alignSelf = "flex-start";
+    s.append(start);
+
+    karteErsetzen([s], false);
+    kopfUndFussSetzen();
+    start.focus();
+  };
+
+  const zeichneKarte = (mitAnimation) => {
+    ansicht = "karte";
+    const k = aktuelle();
+    const seiten = [];
+
+    const vorn = seiteBauen();
+    vorn.append(
+      knoten("span", "augenbraue", k.art === "frage" ? "Frage" : "Lernkarte"),
+      knoten("p", "frage", k.vorderseite)
+    );
+
+    if (k.art === "frage") {
+      const liste = knoten("div", "antworten");
+      k.gemischte.forEach((antwort, i) => {
+        const b = knoten("button", "antwort");
+        b.type = "button";
+        b.append(knoten("span", "taste", BUCHSTABEN[i]), document.createTextNode(antwort.text));
+        b.addEventListener("click", () => antworten(i));
+        liste.append(b);
+      });
+      vorn.append(liste);
+    } else {
+      const drehen = knoten("button", "knopf leise", "Umdrehen");
+      drehen.type = "button";
+      drehen.style.marginTop = "auto";
+      drehen.style.alignSelf = "flex-start";
+      drehen.addEventListener("click", umdrehen);
+      vorn.append(drehen, knoten("span", "hinweis", "oder Leertaste"));
+    }
+    seiten.push(vorn);
+
+    const hinten = seiteBauen("rueckseite");
+    if (k.art === "frage") {
+      const richtig = k.gewaehlt === k.richtige_position;
+      hinten.append(knoten("p", `urteil ${richtig ? "ja" : "nein"}`, richtig ? "Richtig!" : "Leider falsch"));
+      const loesung = knoten("p", "loesung");
+      if (!richtig && k.gewaehlt !== null) {
+        loesung.append(knoten("span", "deine", `Deine Antwort: ${k.gemischte[k.gewaehlt].text}`), knoten("br"));
+      }
+      loesung.append(document.createTextNode("Richtig ist: "), knoten("strong", null, k.gemischte[k.richtige_position].text));
+      hinten.append(loesung);
+      if (k.erklaerung) hinten.append(knoten("p", "erklaerung", k.erklaerung));
+    } else {
+      hinten.append(knoten("span", "augenbraue", "Antwort"), knoten("p", "loesung", k.rueckseite));
+      if (BUNDLE.selbsteinschaetzung && k.gewusst === null) {
+        const wahl = knoten("div", "selbsteinschaetzung");
+        wahl.append(
+          knopf("knopf", "A", "Wusste ich", () => einschaetzen(true)),
+          knopf("knopf leise", "B", "Wusste ich nicht", () => einschaetzen(false))
+        );
+        hinten.append(wahl);
+      } else if (k.gewusst !== null) {
+        hinten.append(knoten("p", "erklaerung", k.gewusst ? "Als gewusst gewertet." : "Als nicht gewusst gewertet."));
+      }
+    }
+    seiten.push(hinten);
+
+    karteErsetzen(seiten, mitAnimation);
+    $("karte").classList.toggle("gedreht", beantwortet(k) || k.aufgedeckt === true);
+    kopfUndFussSetzen();
+  };
+
+  const zeichneErgebnis = () => {
+    ansicht = "ergebnis";
+    const { erreicht, moeglich } = punkte();
+    const fragen = lauf.karten.filter((k) => k.art === "frage");
+    const fragenRichtig = fragen.filter((k) => k.gewaehlt === k.richtige_position).length;
+    const karten = lauf.karten.filter((k) => k.art === "flashcard");
+    const kartenGewusst = karten.filter((k) => k.gewusst === true).length;
+    const daneben = danebenGegangen();
+
+    const s = seiteBauen("rueckseite");
+    s.style.transform = "none";
+    s.style.position = "relative";
+    s.style.background = "var(--zettel-vorn)";
+
+    const anteil = moeglich ? erreicht / moeglich : 0;
+    const fazit = anteil === 1 ? "Alles richtig. Stark."
+                : anteil >= .8 ? "Stark! Nur wenig daneben."
+                : anteil >= .5 ? "Solide – schau dir die Fehler an."
+                : "Da geht noch was. Nimm die Fehler nochmal.";
+
+    s.append(
+      knoten("span", "klasse", "Geschafft"),
+      (() => { const p = knoten("p", "punktzahl", String(erreicht));
+               p.append(knoten("small", null, ` / ${moeglich}`)); return p; })(),
+      knoten("p", "fazit", fazit)
+    );
+
+    if (fragen.length && karten.length) {
+      const auf = knoten("div", "aufschluesselung");
+      const k1 = knoten("div", "kachel gut");
+      k1.append(knoten("b", null, `${fragenRichtig}/${fragen.length}`), document.createTextNode("Fragen richtig"));
+      const k2 = knoten("div", `kachel ${kartenGewusst === karten.length ? "gut" : "schlecht"}`);
+      k2.append(knoten("b", null, `${kartenGewusst}/${karten.length}`), document.createTextNode("Karten gewusst"));
+      auf.append(k1, k2);
+      s.append(auf);
+    }
+
+    if (daneben.length) {
+      const liste = knoten("div", "fehlerliste");
+      daneben.forEach((k) => {
+        const eintrag = knoten("div", "fehler");
+        eintrag.append(document.createTextNode(k.vorderseite), knoten("br"));
+        if (k.art === "frage") {
+          eintrag.append(knoten("i", null, `Du: ${k.gemischte[k.gewaehlt].text} · `),
+                         knoten("b", null, k.gemischte[k.richtige_position].text));
+        } else {
+          eintrag.append(knoten("b", null, k.rueckseite));
+        }
+        liste.append(eintrag);
+      });
+      s.append(liste);
+    }
+
+    const knoepfe = knoten("div", "ergebnis-knoepfe");
+    const nochmal = knopf("knopf", "A", "Nochmal starten", () => starten(BUNDLE.karten));
+    knoepfe.append(nochmal);
+
+    if (daneben.length) {
+      knoepfe.append(knopf("knopf leise", "B", `Nur die Fehler (${daneben.length})`,
+        () => starten(daneben.map(ursprung))));
+    }
+    s.append(knoepfe);
+
+    karteErsetzen([s], false);
+    kopfUndFussSetzen();
+    ansagen(`Ergebnis: ${erreicht} von ${moeglich}.`);
+    nochmal.focus();
+  };
+
+  // Aus einer Laufkarte die ursprüngliche Kartendefinition zurückgewinnen,
+  // damit der Wiederholungsdurchlauf frisch gemischt startet.
+  const ursprung = (k) => BUNDLE.karten.find((o) => o.vorderseite === k.vorderseite);
+
+  const karteErsetzen = (seiten, mitAnimation) => {
+    const karte = $("karte");
+    if (!mitAnimation) {
+      karte.classList.add("ohne-animation");
+      karte.classList.remove("gedreht");
+    }
+    const innen = $("karte-innen");
+    innen.replaceChildren(...seiten);
+    if (!mitAnimation) {
+      // Ein Frame ohne Übergang, damit beim Blättern nichts flackert.
+      requestAnimationFrame(() => karte.classList.remove("ohne-animation"));
+    }
+  };
+
+  /* ================== Handlungen ================== */
+
+  const starten = (quelle) => {
+    lauf = durchlaufBauen(quelle);
+    zeichneKarte(false);
+    ansagen(`Los geht's. Karte 1 von ${lauf.karten.length}.`);
+    $("karte").querySelector("button")?.focus();
+  };
+
+  const umdrehen = () => {
+    const k = aktuelle();
+    if (k.art !== "flashcard") return;
+    k.aufgedeckt = true;
+    $("karte").classList.add("gedreht");
+    kopfUndFussSetzen();   // Die Tastenleiste zeigt jetzt A und B.
+    ansagen(`Antwort: ${k.rueckseite}`);
+    setTimeout(() => $("karte").querySelector(".rueckseite button")?.focus(), 300);
+  };
+
+  const einschaetzen = (gewusst) => {
+    aktuelle().gewusst = gewusst;
+    ansagen(gewusst ? "Als gewusst gewertet." : "Als nicht gewusst gewertet.");
+    setTimeout(vor, 350);
+  };
+
+  const antworten = (position) => {
+    const k = aktuelle();
+    if (k.gewaehlt !== null) return;
+    k.gewaehlt = position;
+    const richtig = position === k.richtige_position;
+    zeichneKarte(true);
+    $("karte").classList.add("gedreht");
+    ansagen(richtig
+      ? "Richtig."
+      : `Falsch. Richtig ist: ${k.gemischte[k.richtige_position].text}`);
+    // Der angeklickte Knopf ist mit dem Umdrehen verschwunden. Ohne diesen
+    // Schritt haette niemand mehr den Tastaturfokus - Tab faengt dann wieder
+    // ganz vorn an.
+    $("karte").focus({ preventScroll: true });
+  };
+
+  const vor = () => {
+    if (lauf.index === lauf.karten.length - 1) { zeichneErgebnis(); return; }
+    lauf.index++;
+    zeichneKarte(false);
+    ansagen(`Karte ${lauf.index + 1} von ${lauf.karten.length}.`);
+  };
+
+  const zurueck = () => {
+    if (lauf.index === 0) return;
+    lauf.index--;
+    zeichneKarte(false);
+    ansagen(`Karte ${lauf.index + 1} von ${lauf.karten.length}.`);
+  };
+
+  /* ================== Bedienung ================== */
+
+  $("weiter").addEventListener("click", vor);
+  $("zurueck").addEventListener("click", zurueck);
+  $("beenden-knopf").addEventListener("click", zeichneStart);
+
+  // Alles, was klickbar ist, ist auch mit der Tastatur erreichbar. Wo zwei
+  // Moeglichkeiten zur Wahl stehen, sind es immer A und B - dieselbe Geste
+  // wie bei den Antworten, damit man sich nur eine Regel merken muss.
+  const taste = (el) => el?.click();
+
+  document.addEventListener("keydown", (e) => {
+    const gross = e.key.toUpperCase();
+
+    if (ansicht === "start") {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        taste($("karte").querySelector(".knopf"));
+      }
+      return;
+    }
+
+    if (ansicht === "ergebnis") {
+      if (e.key === "Escape") { e.preventDefault(); zeichneStart(); return; }
+      const knoepfe = $("karte").querySelectorAll(".ergebnis-knoepfe .knopf");
+      if (gross === "A" || e.key === "Enter") { e.preventDefault(); taste(knoepfe[0]); }
+      if (gross === "B") { e.preventDefault(); taste(knoepfe[1]); }
+      return;
+    }
+
+    const k = aktuelle();
+
+    if (e.key === "Escape") { e.preventDefault(); zeichneStart(); return; }
+    if (e.key === "ArrowRight") { e.preventDefault(); vor(); return; }
+    if (e.key === "ArrowLeft") { e.preventDefault(); zurueck(); return; }
+
+    if (k.art === "flashcard") {
+      // Vorderseite: umdrehen. Rueckseite: einschaetzen.
+      if (!k.aufgedeckt) {
+        if (e.key === " " || e.key === "Enter") { e.preventDefault(); umdrehen(); }
+        return;
+      }
+      if (BUNDLE.selbsteinschaetzung && k.gewusst === null) {
+        if (gross === "A") { e.preventDefault(); einschaetzen(true); }
+        if (gross === "B") { e.preventDefault(); einschaetzen(false); }
+      } else if (e.key === " " || e.key === "Enter") {
+        e.preventDefault(); vor();
+      }
+      return;
+    }
+
+    if (k.gewaehlt !== null) {
+      // Frage ist beantwortet - nur noch blaettern.
+      if (e.key === " " || e.key === "Enter") { e.preventDefault(); vor(); }
+      return;
+    }
+    const treffer = BUCHSTABEN.indexOf(gross);
+    if (treffer >= 0 && treffer < k.gemischte.length) { e.preventDefault(); antworten(treffer); return; }
+    const zahl = Number(e.key);
+    if (zahl >= 1 && zahl <= k.gemischte.length) { e.preventDefault(); antworten(zahl - 1); }
+  });
+
+  zeichneStart();
+})();
+</script>

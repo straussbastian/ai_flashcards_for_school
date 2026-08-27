@@ -236,7 +236,26 @@ Beim Start und bei jedem Neustart werden **Karten und Antwortreihenfolge frisch 
 
 **Frage:** Die Buchstaben A–D werden **nach** dem Mischen vergeben, also der Reihe nach von oben. Auswahl per Klick oder Taste A–D. Die Karte dreht sich und zeigt „Richtig!" oder „Leider falsch", darunter die eigene Antwort, die richtige Lösung und – falls vorhanden – die Erklärung.
 
-**Steuerung:** `A`–`D` wählen, Leertaste umdrehen, `←`/`→` blättern, `Esc` beenden. Am Handy zwei breite Balken unten, kein Wischen. Bereits beantwortete Karten behalten beim Zurückblättern ihr Ergebnis; eine Antwort kann nicht nachträglich geändert werden.
+**Steuerung.** Am Handy zwei breite Balken unten, kein Wischen. Bereits beantwortete Karten behalten beim Zurückblättern ihr Ergebnis; eine Antwort kann nicht nachträglich geändert werden.
+
+Am Rechner ist **jedes** Bedienelement mit der Tastatur erreichbar — es gibt keine Stelle, an der man zur Maus greifen muss. Dahinter steht eine einzige Regel: **Wo zwei Möglichkeiten zur Wahl stehen, sind es immer A und B.** Dieselbe Geste wie bei den Antworten, damit man sich nur eine Sache merken muss.
+
+| Wo | Taste |
+|---|---|
+| Startseite | Eingabetaste startet |
+| Flashcard, Vorderseite | Leertaste dreht um |
+| Flashcard, Rückseite | `A` wusste ich · `B` wusste ich nicht |
+| Quizfrage | `A`–`D`, alternativ `1`–`4` |
+| Ergebnis | `A` nochmal starten · `B` nur die Fehler |
+| Überall | `←` `→` blättern · `Esc` beenden |
+
+Zwei Dinge gehören dazu, sonst trägt die Regel nicht:
+
+**Die Kürzel stehen sichtbar auf den Knöpfen.** Ein Kürzel, das man nicht sieht, benutzt niemand.
+
+**Die Tastenleiste zeigt nur, was gerade wirklich geht.** Sie wechselt mit dem Zustand — auf der Kartenvorderseite „Leertaste umdrehen", nach dem Umdrehen „A wusste ich · B wusste ich nicht", bei einer beantworteten Frage nur noch „← → blättern". Eine Leiste, die Tasten nennt, die gerade nichts tun, erzieht dazu, sie nicht mehr zu lesen.
+
+Der Tastaturfokus darf nie verloren gehen. Nach dem Beantworten verschwindet der angeklickte Knopf mit der Drehung; der Fokus wandert deshalb auf die Karte, sonst begänne Tab wieder ganz vorn.
 
 ### Optik
 
@@ -261,6 +280,7 @@ Aus den freigegebenen Mockups, damit die Umsetzung nicht davon abweicht:
 
 Erfahrungsgemäß sieht das fertige Ergebnis oft ganz anders aus als der Entwurf, weil Mockups weggeworfen werden und die Umsetzung aus dem Gedächtnis entsteht. Dagegen drei feste Regeln:
 
+0. **Es gibt einen bedienbaren Prototypen**, `docs/design/prototyp.html`. Er enthält den kompletten Ablauf mit fest eingebauten Beispielkarten — Umklappen, Mischen, Selbsteinschätzung, Tastaturbedienung, Ergebnis mit Fehlerliste und Fehler-Wiederholung. Er ist vom Auftraggeber am Handy und am Rechner durchgespielt und abgenommen. **Er ist die verbindliche Referenz für Plan 3**, nicht nur eine Anschauung: Wo die echte Umsetzung sich anders verhält, ist die echte Umsetzung falsch — es sei denn, jemand entscheidet ausdrücklich anders.
 1. **Die freigegebenen Mockups liegen im Repo**, unter `docs/design/mockups/`. Sie sind Referenz, nicht Dekoration. (Sie enthalten ihr CSS inline; die Klassen `.cards` und `.options` stammen aus dem Brainstorming-Rahmen und fehlen beim direkten Öffnen – die Karten selbst rendern korrekt.)
 2. **Die Werte aus der Tabelle oben werden wörtlich übernommen**, als CSS-Custom-Properties in einer einzigen Datei `static/css/tokens.css`. Keine „ungefähr dieses Gelb"-Entscheidungen im Verlauf der Umsetzung. Jede Abweichung ist damit eine sichtbare Änderung an einer Datei, nicht ein schleichendes Abdriften.
 3. **Playwright macht Screenshots** der fertigen Seiten in den drei Viewports (390 px, 820 px, 1440 px). Die werden vor der Abnahme neben die Mockups gelegt und angeschaut. Erst dann gilt die Optik als umgesetzt.
