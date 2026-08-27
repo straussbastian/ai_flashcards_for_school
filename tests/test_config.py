@@ -36,8 +36,66 @@ def test_fehlende_pflichtangabe_faellt_auf(monkeypatch):
     monkeypatch.delenv("APP_SECRET", raising=False)
     monkeypatch.delenv("BASE_URL", raising=False)
 
+    # base_url ist hier bewusst gültig: Seit base_url ein Pflichtfeld mit
+    # Schema-Prüfung ist, würde ein Wert wie "z" schon am Validator
+    # scheitern - der Test wäre grün, ohne über teacher_password irgendetwas
+    # auszusagen.
     with pytest.raises(ValueError):
-        Settings(_env_file=None, database_url="x", app_secret="y", base_url="z")
+        Settings(
+            _env_file=None,
+            database_url="x",
+            app_secret="y",
+            base_url="https://karten.example.de",
+        )
+
+
+def test_fehlende_basis_url_faellt_auf(monkeypatch):
+    """BASE_URL ist Pflicht und hat keinen Default.
+
+    Vorher stand in app/config.py `base_url: str = "http://localhost:8000"`.
+    Fehlte die Variable im Betrieb, startete die Anwendung anstandslos und
+    der MCP-Server aus Plan 2 händigte der Lehrkraft bei jeder schreibenden
+    Antwort einen `http://localhost:8000/...`-Link aus, den niemand aufrufen
+    kann. Die Spec führt BASE_URL in Abschnitt 3 als Pflichtvariable.
+    """
+    monkeypatch.delenv("BASE_URL", raising=False)
+
+    with pytest.raises(ValueError):
+        Settings(
+            _env_file=None,
+            database_url="x",
+            app_secret="y",
+            teacher_password="z",
+        )
+
+
+@pytest.mark.parametrize(
+    "wert",
+    [
+        pytest.param("karten.example.de", id="ohne_schema"),
+        pytest.param("ftp://karten.example.de", id="falsches_schema"),
+        pytest.param("", id="leer"),
+    ],
+)
+def test_basis_url_ohne_http_schema_faellt_auf(wert):
+    """Ein Wert ohne http:// oder https:// ergibt keinen anklickbaren Link.
+
+    "karten.example.de/rote-katze-springt" ist eine relative Adresse. In der
+    Chat-Antwort an die Lehrkraft sähe sie beinahe richtig aus und führte
+    doch ins Leere - ein Fehler, der erst beim Klicken auffällt statt beim
+    Start.
+    """
+    with pytest.raises(ValueError):
+        _einstellungen(base_url=wert)
+
+
+def test_gueltige_schemata_werden_angenommen():
+    assert _einstellungen(base_url="http://localhost:8000").base_url == (
+        "http://localhost:8000"
+    )
+    assert _einstellungen(base_url="https://karten.example.de").base_url == (
+        "https://karten.example.de"
+    )
 
 
 @pytest.fixture
