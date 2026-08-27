@@ -28,4 +28,5 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
+    """Gibt die gecachte Konfigurationsinstanz zurück. Liest die .env einmalig."""
     return Settings()  # type: ignore[call-arg]
