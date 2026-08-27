@@ -24,7 +24,18 @@ def test_abschliessender_schraegstrich_wird_entfernt():
     assert einstellungen.bundle_url("blaue-ampel-tanzt") == "https://karten.example.de/blaue-ampel-tanzt"
 
 
-def test_fehlende_pflichtangabe_faellt_auf():
+def test_fehlende_pflichtangabe_faellt_auf(monkeypatch):
+    """Stellt sicher, dass teacher_password wirklich erforderlich ist.
+
+    Löscht Umgebungsvariablen, die den Test verfälschen würden, damit
+    er unabhängig von der Umgebung des Ausführenden läuft.
+    """
+    # Umgebungsvariablen löschen, die den Test verfälschen könnten
+    monkeypatch.delenv("TEACHER_PASSWORD", raising=False)
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.delenv("APP_SECRET", raising=False)
+    monkeypatch.delenv("BASE_URL", raising=False)
+
     with pytest.raises(ValueError):
         Settings(_env_file=None, database_url="x", app_secret="y", base_url="z")
 
