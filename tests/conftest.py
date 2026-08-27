@@ -6,6 +6,7 @@ import pytest_asyncio
 from fastapi.testclient import TestClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+from app import models  # noqa: F401 -- registriert die Tabellen bei Base.metadata
 from app.db import Base, get_session
 from app.main import app
 
@@ -41,7 +42,20 @@ async def session(test_engine) -> AsyncGenerator[AsyncSession, None]:
     """Eine Session pro Test, die am Ende zurueckgerollt wird."""
     verbindung = await test_engine.connect()
     transaktion = await verbindung.begin()
-    fabrik = async_sessionmaker(bind=verbindung, expire_on_commit=False)
+    # join_transaction_mode="create_savepoint": Ohne dieses Flag benutzt die
+    # Session den Modus "rollback_only" (SQLAlchemy-Default fuer eine bereits
+    # begonnene, nicht verschachtelte Connection-Transaktion). Darin leitet
+    # ein automatisches Session-Rollback - wie es SQLAlchemy nach einem
+    # fehlgeschlagenen flush() ausloest, siehe Constraint-Tests in
+    # tests/test_models.py - direkt an "transaktion" oben weiter und beendet
+    # sie. Der spaetere, hier unten stehende await transaktion.rollback()
+    # liefe dann ins Leere und SQLAlchemy warnt mit "transaction already
+    # deassociated from connection". Mit "create_savepoint" arbeitet die
+    # Session stattdessen in einem eigenen SAVEPOINT, sodass die aeussere
+    # Transaktion bis zum expliziten Rollback unten unangetastet bleibt.
+    fabrik = async_sessionmaker(
+        bind=verbindung, expire_on_commit=False, join_transaction_mode="create_savepoint"
+    )
     async with fabrik() as sitzung:
         yield sitzung
     await transaktion.rollback()
