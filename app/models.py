@@ -202,7 +202,16 @@ class Karte(Base):
     # Objekt (JSONB wird sonst nur bei kompletter Neuzuweisung als "dirty"
     # markiert) und speichert die Aenderung stillschweigend nicht. Beim
     # spaeteren Bearbeiten von Fragen waere das ein wartendes Raetsel.
-    antworten: Mapped[list[str] | None] = mapped_column(MutableList.as_mutable(JSONB))
+    # none_as_null=True: Ohne das schreibt SQLAlchemy ein Python-None als
+    # JSON-null in die Spalte, nicht als SQL NULL - und
+    # ck_karten_felder_passen_zur_art verlangt fuer eine Flashcard
+    # ausdruecklich "antworten IS NULL". Ein Aufrufer, der die Spaltenwerte
+    # vollstaendig uebergibt (so macht es app/mcp/dienste.py), scheiterte
+    # sonst am Constraint, obwohl er das Richtige tut. Die Annotation sagt
+    # list[str] | None - None soll auch NULL heissen.
+    antworten: Mapped[list[str] | None] = mapped_column(
+        MutableList.as_mutable(JSONB(none_as_null=True))
+    )
     richtige_index: Mapped[int | None] = mapped_column(Integer)
     erklaerung: Mapped[str | None] = mapped_column(Text)
     erstellt_am: Mapped[datetime] = mapped_column(

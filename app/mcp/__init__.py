@@ -78,8 +78,13 @@ def mcp_bauen() -> tuple[MCPServer, Starlette]:
             required_scopes=[SCOPE],
         ),
     )
-    # Ab Task 10 registriert diese Zeile die acht Werkzeuge. Bis dahin gibt
-    # es keine - der Transport wird trotzdem vollstaendig geprueft.
+    # Der Import steht hier und nicht oben: app/mcp/werkzeuge.py importiert
+    # app.mcp.dienste, und ein Import auf Modulebene ergaebe einen Ringschluss
+    # ueber app.mcp.
+    from app.mcp.werkzeuge import registrieren
+
+    registrieren(server)
+
     asgi = server.streamable_http_app(
         streamable_http_path=MCP_PFAD,
         transport_security=TRANSPORTSICHERHEIT,
