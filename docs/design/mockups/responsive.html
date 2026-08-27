@@ -1,0 +1,157 @@
+<style>
+  .r-stage {
+    background: radial-gradient(120% 90% at 50% 0%, #2a3138 0%, #16191d 70%), #16191d;
+    position: relative; border-radius: 12px; padding: 28px 20px 24px; margin-bottom: 1.5rem;
+  }
+  .r-stage::after {
+    content: ""; position: absolute; inset: 0; pointer-events: none; border-radius: 12px;
+    background-image: linear-gradient(rgba(255,255,255,.028) 1px, transparent 1px),
+                      linear-gradient(90deg, rgba(255,255,255,.028) 1px, transparent 1px);
+    background-size: 22px 22px;
+  }
+  .r-row { position: relative; z-index: 1; display: flex; align-items: flex-end; justify-content: center; gap: 30px; flex-wrap: wrap; }
+  .r-unit { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  .r-tag { font-size: .68rem; letter-spacing: .08em; text-transform: uppercase; color: #7b8996; }
+
+  .r-dev { background: #0e1114; border: 2px solid #39424b; border-radius: 22px; padding: 10px; box-shadow: 0 16px 30px rgba(0,0,0,.5); }
+  .r-screen { background: #1b1f24; border-radius: 13px; overflow: hidden; display: flex; flex-direction: column; }
+  .r-phone .r-screen { width: 186px; height: 372px; }
+  .r-tab .r-screen { width: 290px; height: 372px; }
+  .r-desk { border-radius: 10px; }
+  .r-desk .r-screen { width: 420px; height: 262px; border-radius: 6px; }
+
+  .r-top { display: flex; align-items: center; justify-content: space-between; padding: 8px 10px 0; font-size: .54rem; color: #8b98a5; }
+  .r-bar { height: 3px; background: #2c343c; margin: 6px 10px 0; border-radius: 2px; overflow: hidden; }
+  .r-bar span { display: block; height: 100%; width: 35%; background: #ffd23f; }
+  .r-body { flex: 1; display: flex; align-items: center; justify-content: center; padding: 10px; }
+
+  .r-card {
+    width: 100%; background: linear-gradient(158deg, #ffe57a 0%, #ffd23f 100%);
+    border-radius: 3px 3px 5px 5px; color: #2b2410; padding: 10px 9px; position: relative;
+    box-shadow: 0 10px 18px rgba(0,0,0,.5); display: flex; flex-direction: column; gap: 7px;
+    font-family: system-ui, -apple-system, sans-serif;
+  }
+  .r-card::before, .r-card::after {
+    content: ""; position: absolute; inset: 0; border-radius: 3px 3px 5px 5px; z-index: -1;
+  }
+  .r-card::before { background: #e9bf3a; transform: rotate(-2deg) translate(-4px, 4px); }
+  .r-card::after { background: #f0cd52; transform: rotate(1deg) translate(3px, 2px); }
+  .r-q { font-size: .66rem; font-weight: 700; line-height: 1.25; }
+  .r-opt { display: flex; align-items: center; gap: 5px; background: rgba(255,255,255,.45); border-radius: 5px; font-size: .56rem; }
+  .r-key { width: 11px; height: 11px; border-radius: 3px; background: rgba(43,36,16,.16); display: grid; place-items: center; font-size: .45rem; font-weight: 700; flex: none; }
+
+  /* Touch: fette Ziele, gestapelt */
+  .r-phone .r-opt, .r-tab .r-opt { padding: 8px 7px; }
+  .r-phone .r-opts, .r-tab .r-opts { display: flex; flex-direction: column; gap: 5px; }
+  /* Desktop: kompakter, Tastenkürzel sichtbar */
+  .r-desk .r-opt { padding: 4px 7px; }
+  .r-desk .r-opts { display: flex; flex-direction: column; gap: 3px; }
+
+  .r-foot { display: flex; align-items: center; justify-content: space-between; padding: 8px 10px 10px; gap: 6px; }
+  .r-nav { background: #262f38; color: #c6d0da; border-radius: 7px; font-size: .58rem; display: grid; place-items: center; }
+  .r-phone .r-nav, .r-tab .r-nav { height: 34px; flex: 1; }
+  .r-desk .r-nav { height: 20px; padding: 0 9px; }
+  .r-hintbar { font-size: .5rem; color: #6f7c89; text-align: center; padding: 0 10px 9px; letter-spacing: .02em; }
+
+  .r-note { font-size: .74rem; color: #7b8996; text-align: center; max-width: 200px; line-height: 1.45; }
+</style>
+
+<h2>Dasselbe Bundle auf drei Geräten</h2>
+<p class="subtitle">Ein Layout, drei Ausprägungen — nicht drei Seiten. Die Karte bleibt immer das Zentrum, nur Bediengrößen und Hilfen ändern sich.</p>
+
+<div class="r-stage">
+  <div class="r-row">
+
+    <div class="r-unit">
+      <div class="r-tag">Handy · hochkant</div>
+      <div class="r-dev r-phone">
+        <div class="r-screen">
+          <div class="r-top"><span>Frage 7 / 20</span><span>✕</span></div>
+          <div class="r-bar"><span></span></div>
+          <div class="r-body">
+            <div class="r-card">
+              <div class="r-q">Was ist die Hauptstadt von Kroatien?</div>
+              <div class="r-opts">
+                <div class="r-opt"><span class="r-key">A</span> Split</div>
+                <div class="r-opt"><span class="r-key">B</span> Zagreb</div>
+                <div class="r-opt"><span class="r-key">C</span> Dubrovnik</div>
+                <div class="r-opt"><span class="r-key">D</span> Rijeka</div>
+              </div>
+            </div>
+          </div>
+          <div class="r-foot">
+            <div class="r-nav">← zurück</div>
+            <div class="r-nav">weiter →</div>
+          </div>
+        </div>
+      </div>
+      <p class="r-note">Karte füllt den Schirm, Antworten sind daumengroß, Navigation als zwei breite Balken unten.</p>
+    </div>
+
+    <div class="r-unit">
+      <div class="r-tag">Tablet</div>
+      <div class="r-dev r-tab">
+        <div class="r-screen">
+          <div class="r-top"><span>Frage 7 von 20</span><span>beenden ✕</span></div>
+          <div class="r-bar"><span></span></div>
+          <div class="r-body">
+            <div class="r-card">
+              <div class="r-q">Was ist die Hauptstadt von Kroatien?</div>
+              <div class="r-opts">
+                <div class="r-opt"><span class="r-key">A</span> Split</div>
+                <div class="r-opt"><span class="r-key">B</span> Zagreb</div>
+                <div class="r-opt"><span class="r-key">C</span> Dubrovnik</div>
+                <div class="r-opt"><span class="r-key">D</span> Rijeka</div>
+              </div>
+            </div>
+          </div>
+          <div class="r-foot">
+            <div class="r-nav">← zurück</div>
+            <div class="r-nav">weiter →</div>
+          </div>
+        </div>
+      </div>
+      <p class="r-note">Mehr Luft um die Karte, sonst identisch zum Handy. Auch quer nutzbar.</p>
+    </div>
+
+    <div class="r-unit">
+      <div class="r-tag">Rechner</div>
+      <div class="r-dev r-desk">
+        <div class="r-screen">
+          <div class="r-top"><span>Frage 7 von 20</span><span>esc beenden</span></div>
+          <div class="r-bar"><span></span></div>
+          <div class="r-body">
+            <div class="r-card" style="max-width:250px">
+              <div class="r-q">Was ist die Hauptstadt von Kroatien?</div>
+              <div class="r-opts">
+                <div class="r-opt"><span class="r-key">A</span> Split</div>
+                <div class="r-opt"><span class="r-key">B</span> Zagreb</div>
+                <div class="r-opt"><span class="r-key">C</span> Dubrovnik</div>
+                <div class="r-opt"><span class="r-key">D</span> Rijeka</div>
+              </div>
+            </div>
+          </div>
+          <div class="r-hintbar">A B C D wählen · Leertaste umdrehen · ← → blättern · Esc beenden</div>
+        </div>
+      </div>
+      <p class="r-note">Karte zentriert und begrenzt, dafür die Tastaturleiste — hier wird nicht getippt, sondern gedrückt.</p>
+    </div>
+
+  </div>
+</div>
+
+<h3>Eine Frage bleibt: Wie blättert man auf dem Handy?</h3>
+<div class="options">
+  <div class="option" data-choice="buttons" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content"><h3>Nur die Balken unten <em>(Empfehlung)</em></h3><p>Zurück und Weiter als breite Flächen am unteren Rand, wie oben gezeigt. Sichtbar, erklärungsfrei, funktioniert auch mit Handschuh oder für Kinder, die nicht wischen. Nichts kann versehentlich passieren.</p></div>
+  </div>
+  <div class="option" data-choice="swipe" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content"><h3>Wischen statt Buttons</h3><p>Nach links wischen heißt weiter, nach rechts zurück — wie bei Karteikarten-Apps. Fühlt sich nativ an, aber unsichtbar: Wer es nicht kennt, sitzt fest. Und Wischen kollidiert mit dem Scrollen bei langen Fragen.</p></div>
+  </div>
+  <div class="option" data-choice="beides" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content"><h3>Balken + Wischen zusätzlich</h3><p>Buttons sind immer da, Wischen geht zusätzlich für die, die es probieren. Beste Bedienbarkeit, kostet eine überschaubare Menge Extra-Code und einen Test mehr.</p></div>
+  </div>
+</div>

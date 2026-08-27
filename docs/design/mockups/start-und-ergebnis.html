@@ -1,0 +1,132 @@
+<style>
+  .s-stage {
+    background: radial-gradient(120% 90% at 50% 0%, #2a3138 0%, #16191d 70%), #16191d;
+    position: relative; border-radius: 12px; padding: 26px 24px 24px; margin-bottom: 1.5rem;
+  }
+  .s-stage::after {
+    content: ""; position: absolute; inset: 0; pointer-events: none; border-radius: 12px;
+    background-image: linear-gradient(rgba(255,255,255,.028) 1px, transparent 1px),
+                      linear-gradient(90deg, rgba(255,255,255,.028) 1px, transparent 1px);
+    background-size: 22px 22px;
+  }
+  .s-row { position: relative; z-index: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
+  .s-col { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+  .s-tag { font-size: .7rem; letter-spacing: .08em; text-transform: uppercase; color: #7b8996; }
+  .s-note { text-align: center; font-size: .78rem; color: #7b8996; max-width: 330px; }
+
+  .s-panel {
+    width: 330px; min-height: 300px; position: relative;
+    background: linear-gradient(158deg, #ffe57a 0%, #ffd23f 100%);
+    border-radius: 3px 3px 6px 6px; padding: 22px 20px; color: #2b2410;
+    box-shadow: 0 18px 32px rgba(0,0,0,.55);
+    font-family: system-ui, -apple-system, sans-serif;
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  .s-stackwrap { position: relative; }
+  .s-ghost { position: absolute; width: 330px; height: 300px; border-radius: 3px 3px 6px 6px; box-shadow: 0 10px 20px rgba(0,0,0,.45); }
+  .s-g1 { background: #e9bf3a; transform: rotate(-2.2deg) translate(-7px, 7px); }
+  .s-g2 { background: #f0cd52; transform: rotate(1.2deg) translate(4px, 3px); }
+
+  .s-klasse { display: inline-block; align-self: flex-start; font-size: .62rem; letter-spacing: .1em; text-transform: uppercase;
+              background: rgba(43,36,16,.16); padding: 3px 9px; border-radius: 20px; }
+  .s-title { font-size: 1.45rem; font-weight: 700; line-height: 1.15; }
+  .s-desc { font-size: .88rem; line-height: 1.45; opacity: .78; }
+  .s-meta { display: flex; gap: 16px; font-size: .74rem; opacity: .7; margin-top: 2px; }
+  .s-meta b { display: block; font-size: 1.15rem; opacity: 1; font-weight: 700; }
+  .s-btn { margin-top: auto; background: #2b2410; color: #ffd23f; border: none; padding: 12px 18px;
+           border-radius: 8px; font-size: .95rem; font-weight: 600; cursor: pointer; letter-spacing: .02em; }
+  .s-url { font-size: .68rem; opacity: .5; text-align: center; letter-spacing: .03em; }
+
+  /* Ergebnis */
+  .s-score { font-size: 3.2rem; font-weight: 800; line-height: 1; }
+  .s-score small { font-size: 1.1rem; font-weight: 600; opacity: .55; }
+  .s-verdict { font-size: 1.05rem; font-weight: 600; }
+  .s-split { display: flex; gap: 10px; margin-top: 6px; }
+  .s-chip { flex: 1; background: rgba(255,255,255,.42); border-radius: 8px; padding: 8px 10px; font-size: .72rem; }
+  .s-chip b { display: block; font-size: 1.15rem; }
+  .s-chip.ok b { color: #1d7a3c; }
+  .s-chip.no b { color: #b3271e; }
+  .s-list { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+  .s-item { background: rgba(255,255,255,.42); border-left: 3px solid #d1392f; border-radius: 5px; padding: 6px 9px; font-size: .74rem; line-height: 1.35; }
+  .s-item i { font-style: normal; opacity: .6; }
+  .s-item b { color: #1d7a3c; }
+  .s-actions { display: flex; gap: 8px; margin-top: auto; }
+  .s-actions .s-btn { flex: 1; margin: 0; font-size: .82rem; padding: 10px 12px; }
+  .s-btn.ghost { background: rgba(43,36,16,.12); color: #2b2410; }
+</style>
+
+<h2>Startseite und Gesamtergebnis</h2>
+<p class="subtitle">Links die Seite, die ein Schüler unter der Drei-Wort-URL zuerst sieht — die kannst du nur abnicken oder korrigieren. Rechts die eigentliche Frage: Was steht am Ende auf der Ergebniskarte?</p>
+
+<div class="s-stage">
+  <div class="s-row">
+
+    <div class="s-col">
+      <div class="s-tag">Startseite — /rote-katze-springt</div>
+      <div class="s-stackwrap">
+        <div class="s-ghost s-g1"></div>
+        <div class="s-ghost s-g2"></div>
+        <div class="s-panel">
+          <span class="s-klasse">Klasse 7b</span>
+          <div class="s-title">Hauptstädte Europas</div>
+          <div class="s-desc">Wir wiederholen die Hauptstädte der EU-Länder. Erst zehn Karten zum Einprägen, dann zehn Fragen.</div>
+          <div class="s-meta">
+            <span><b>20</b> Karten</span>
+            <span><b>10</b> zum Lernen</span>
+            <span><b>10</b> Fragen</span>
+          </div>
+          <button class="s-btn">Los geht's →</button>
+        </div>
+      </div>
+      <p class="s-url">flashcards.schule.de/rote-katze-springt</p>
+      <p class="s-note">Titel, Beschreibung und Klasse kommen aus der Datenbank — die Lehrerin gibt sie per MCP mit. Die Zahlen zählt der Server selbst.</p>
+    </div>
+
+    <div class="s-col">
+      <div class="s-tag">Ergebnis — zwei Ausbaustufen</div>
+      <div class="s-stackwrap">
+        <div class="s-ghost s-g1"></div>
+        <div class="s-ghost s-g2"></div>
+        <div class="s-panel">
+          <span class="s-klasse">Geschafft</span>
+          <div class="s-score">17<small> / 20</small></div>
+          <div class="s-verdict">Stark! Drei daneben.</div>
+          <div class="s-split">
+            <div class="s-chip ok"><b>9/10</b> Fragen richtig</div>
+            <div class="s-chip no"><b>8/10</b> Karten gewusst</div>
+          </div>
+          <div class="s-list">
+            <div class="s-item">Hauptstadt von Kroatien?<br><i>Du: Split ·</i> <b>Zagreb</b></div>
+            <div class="s-item">Hauptstadt von Slowenien?<br><i>Du: Zagreb ·</i> <b>Ljubljana</b></div>
+          </div>
+          <div class="s-actions">
+            <button class="s-btn">Nochmal starten</button>
+            <button class="s-btn ghost">Nur die Fehler</button>
+          </div>
+        </div>
+      </div>
+      <p class="s-note">Alles unterhalb der großen Zahl ist optional — genau darüber entscheidest du unten.</p>
+    </div>
+
+  </div>
+</div>
+
+<div class="options">
+  <div class="option" data-choice="nur-zahl" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content"><h3>Nur die Zahl</h3><p>„17 von 20" plus Button „Nochmal starten". Genau das, was in <code>idee.md</code> steht — mehr nicht. Am schnellsten fertig, keine Diskussion über Datenhaltung.</p></div>
+  </div>
+  <div class="option" data-choice="mit-fehlern" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content"><h3>Zahl + Fehlerliste <em>(Empfehlung)</em></h3><p>Zusätzlich die Aufschlüsselung Fragen/Karten und eine Liste der falsch beantworteten Fragen mit richtiger Lösung. Kostet nichts extra — die Daten liegen ohnehin im Browser — und macht aus dem Ergebnis einen Lerneffekt.</p></div>
+  </div>
+  <div class="option" data-choice="mit-wiederholung" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content"><h3>… plus „Nur die Fehler"</h3><p>Wie B, zusätzlich ein zweiter Button, der einen neuen Durchlauf nur mit den falsch beantworteten Karten startet. Der stärkste Lerneffekt, aber ein zusätzlicher Zustand im Frontend, der getestet werden will.</p></div>
+  </div>
+</div>
+
+<div class="section" style="margin-top:1.25rem">
+  <div class="label">Zur Erinnerung</div>
+  <p>Nichts davon wird gespeichert. Der ganze Durchlauf lebt im Speicher der Seite; beim Neuladen ist er weg. Keine Cookies, keine Schülerdaten, kein Server-Log über Antworten.</p>
+</div>

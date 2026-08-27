@@ -1,0 +1,189 @@
+<style>
+  .q-stage {
+    background: radial-gradient(120% 90% at 50% 0%, #2a3138 0%, #16191d 70%), #16191d;
+    position: relative; border-radius: 12px; padding: 26px 24px 24px;
+    display: grid; grid-template-columns: 1fr 1fr; gap: 28px; margin-bottom: 1.5rem;
+  }
+  .q-stage::after {
+    content: ""; position: absolute; inset: 0; pointer-events: none; border-radius: 12px;
+    background-image: linear-gradient(rgba(255,255,255,.028) 1px, transparent 1px),
+                      linear-gradient(90deg, rgba(255,255,255,.028) 1px, transparent 1px);
+    background-size: 22px 22px;
+  }
+  .q-col { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: 14px; }
+  .q-tag { font-size: .7rem; letter-spacing: .08em; text-transform: uppercase; color: #7b8996; }
+
+  /* Kopfzeile mit Fortschritt + Steuerung */
+  .q-chrome { width: 320px; display: flex; align-items: center; justify-content: space-between; font-size: .68rem; color: #8b98a5; }
+  .q-bar { width: 100%; height: 3px; background: #2c343c; border-radius: 2px; overflow: hidden; margin-top: 6px; }
+  .q-bar span { display: block; height: 100%; width: 35%; background: #ffd23f; }
+  .q-chrome-wrap { width: 320px; }
+
+  /* Karten-Grundkörper */
+  .q-card { width: 320px; height: 300px; perspective: 1400px; position: relative; }
+  .q-stack { position: absolute; width: 320px; height: 300px; border-radius: 3px 3px 6px 6px; box-shadow: 0 10px 20px rgba(0,0,0,.45); }
+  .q-s1 { background: #e9bf3a; transform: rotate(-2.2deg) translate(-7px, 7px); }
+  .q-s2 { background: #f0cd52; transform: rotate(1.2deg) translate(4px, 3px); }
+  .q-inner { position: relative; width: 100%; height: 100%; transition: transform .55s cubic-bezier(.2,.7,.3,1); transform-style: preserve-3d; }
+  .q-card.flipped .q-inner { transform: rotateY(180deg); }
+  .q-face {
+    position: absolute; inset: 0; backface-visibility: hidden; -webkit-backface-visibility: hidden;
+    background: linear-gradient(158deg, #ffe57a 0%, #ffd23f 100%);
+    border-radius: 3px 3px 6px 6px; padding: 18px 18px 16px; color: #2b2410;
+    box-shadow: 0 18px 32px rgba(0,0,0,.55); display: flex; flex-direction: column; gap: 12px;
+    font-family: system-ui, -apple-system, sans-serif;
+  }
+  .q-back { transform: rotateY(180deg); align-items: center; justify-content: center; text-align: center; }
+  .q-eyebrow { font-size: .6rem; letter-spacing: .12em; text-transform: uppercase; opacity: .45; }
+  .q-text { font-size: 1.02rem; line-height: 1.3; font-weight: 600; }
+  .q-opts { display: flex; flex-direction: column; gap: 7px; margin-top: auto; }
+  .q-opt {
+    display: flex; align-items: center; gap: 9px; padding: 8px 10px; border-radius: 7px;
+    background: rgba(255,255,255,.42); font-size: .82rem; cursor: pointer;
+    border: 1.5px solid transparent; transition: all .15s ease; text-align: left;
+  }
+  .q-opt:hover { background: rgba(255,255,255,.72); }
+  .q-key {
+    flex: none; width: 19px; height: 19px; border-radius: 4px; display: grid; place-items: center;
+    font-size: .66rem; font-weight: 700; background: rgba(43,36,16,.14);
+  }
+  .q-opt.correct { background: #2f9e52; color: #fff; border-color: #257e41; }
+  .q-opt.correct .q-key { background: rgba(255,255,255,.28); }
+  .q-opt.wrong { background: #d1392f; color: #fff; border-color: #a72d25; }
+  .q-opt.wrong .q-key { background: rgba(255,255,255,.28); }
+  .q-opt.dim { opacity: .38; }
+  .q-verdict { font-size: 1.5rem; font-weight: 700; }
+  .q-verdict.ok { color: #1d7a3c; }
+  .q-verdict.no { color: #b3271e; }
+  .q-solution { font-size: .92rem; line-height: 1.35; }
+  .q-expl { font-size: .78rem; opacity: .72; line-height: 1.4; max-width: 240px; }
+  .q-next {
+    margin-top: 4px; font-size: .72rem; letter-spacing: .05em; text-transform: uppercase;
+    background: #2b2410; color: #ffd23f; border: none; padding: 7px 14px; border-radius: 6px; cursor: pointer;
+  }
+  .q-reset { background: none; border: none; color: #7b8996; font-size: .68rem; cursor: pointer; text-decoration: underline; }
+  .q-note { text-align: center; font-size: .78rem; color: #7b8996; max-width: 330px; }
+</style>
+
+<h2>Quizfrage: Wie kommt die Auflösung?</h2>
+<p class="subtitle"><strong>Beide Varianten sind echt bedienbar</strong> — klick eine Antwort an (bewusst mal die falsche). Die richtige Antwort ist jeweils <em>Zagreb</em>. Mit „nochmal" setzt du die Demo zurück.</p>
+
+<div class="q-stage">
+
+  <!-- ===== Variante A: Sofort-Auflösung an Ort und Stelle ===== -->
+  <div class="q-col">
+    <div class="q-tag">A — Sofort einfärben</div>
+    <div class="q-chrome-wrap">
+      <div class="q-chrome"><span>Frage 7 von 20</span><span>← zurück · weiter → · esc beenden</span></div>
+      <div class="q-bar"><span></span></div>
+    </div>
+    <div class="q-card" id="cardA">
+      <div class="q-stack q-s1"></div>
+      <div class="q-stack q-s2"></div>
+      <div class="q-inner">
+        <div class="q-face">
+          <span class="q-eyebrow">Frage</span>
+          <span class="q-text">Was ist die Hauptstadt von Kroatien?</span>
+          <div class="q-opts" id="optsA">
+            <div class="q-opt" data-k="A" onclick="pickA(this,false)"><span class="q-key">A</span> Split</div>
+            <div class="q-opt" data-k="B" onclick="pickA(this,true)"><span class="q-key">B</span> Zagreb</div>
+            <div class="q-opt" data-k="C" onclick="pickA(this,false)"><span class="q-key">C</span> Dubrovnik</div>
+            <div class="q-opt" data-k="D" onclick="pickA(this,false)"><span class="q-key">D</span> Rijeka</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <button class="q-reset" onclick="resetA()">nochmal</button>
+    <p class="q-note">Die Karte bleibt liegen, die Buttons färben sich: deine Wahl rot, die richtige grün. Alles bleibt sichtbar, man vergleicht direkt. Für eine Erklärung ist aber kaum Platz.</p>
+  </div>
+
+  <!-- ===== Variante B: Karte dreht sich zur Auflösung ===== -->
+  <div class="q-col">
+    <div class="q-tag">B — Karte dreht um</div>
+    <div class="q-chrome-wrap">
+      <div class="q-chrome"><span>Frage 7 von 20</span><span>← zurück · weiter → · esc beenden</span></div>
+      <div class="q-bar"><span></span></div>
+    </div>
+    <div class="q-card" id="cardB">
+      <div class="q-stack q-s1"></div>
+      <div class="q-stack q-s2"></div>
+      <div class="q-inner">
+        <div class="q-face">
+          <span class="q-eyebrow">Frage</span>
+          <span class="q-text">Was ist die Hauptstadt von Kroatien?</span>
+          <div class="q-opts">
+            <div class="q-opt" onclick="pickB(false,'Split')"><span class="q-key">A</span> Split</div>
+            <div class="q-opt" onclick="pickB(true,'Zagreb')"><span class="q-key">B</span> Zagreb</div>
+            <div class="q-opt" onclick="pickB(false,'Dubrovnik')"><span class="q-key">C</span> Dubrovnik</div>
+            <div class="q-opt" onclick="pickB(false,'Rijeka')"><span class="q-key">D</span> Rijeka</div>
+          </div>
+        </div>
+        <div class="q-face q-back">
+          <span class="q-verdict" id="verdictB">—</span>
+          <span class="q-solution" id="solB"></span>
+          <span class="q-expl" id="explB"></span>
+          <button class="q-next" onclick="resetB()">weiter →</button>
+        </div>
+      </div>
+    </div>
+    <button class="q-reset" onclick="resetB()">nochmal</button>
+    <p class="q-note">Wie bei der Flashcard: Klick auf die Antwort dreht die Karte. Rückseite zeigt groß Richtig/Falsch, die Lösung und Platz für eine Erklärung der Lehrerin.</p>
+  </div>
+
+</div>
+
+<div class="options">
+  <div class="option" data-choice="sofort" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content"><h3>Sofort einfärben</h3><p>Schnellstes Feedback, kein Warten auf Animation, Frage und Antwort bleiben zusammen sichtbar. Aber keine Fläche für eine Erklärung — nur die nackte Korrektur.</p></div>
+  </div>
+  <div class="option" data-choice="drehen" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content"><h3>Karte dreht um <em>(Empfehlung)</em></h3><p>Ein einziges Bewegungsprinzip für Flashcards und Quizfragen — im Hybrid-Bundle fühlt sich alles gleich an. Die Rückseite trägt Verdikt, Lösung und ein optionales Erklärfeld, das die Lehrerin per MCP mitgeben kann.</p></div>
+  </div>
+  <div class="option" data-choice="beides" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content"><h3>Beides: einfärben, dann drehen</h3><p>Buttons färben sich sofort, nach einem Moment dreht die Karte zur Erklärung. Doppeltes Feedback, aber auch doppelte Bewegung pro Frage — bei 20 Fragen kann das nerven.</p></div>
+  </div>
+</div>
+
+<div class="section" style="margin-top:1.25rem">
+  <div class="label">Was daran hängt</div>
+  <p>Wenn du B nimmst, bekommt jede Quizfrage in der Datenbank ein optionales Feld <code>erklaerung</code>, das die Lehrerin per MCP füllen kann („Zagreb liegt im Landesinneren, Split und Dubrovnik an der Küste"). Bei A würde das Feld nirgends hinpassen — dann lassen wir es weg.</p>
+</div>
+
+<script>
+  function resetA() {
+    document.querySelectorAll('#optsA .q-opt').forEach(function (o) {
+      o.classList.remove('correct', 'wrong', 'dim');
+    });
+  }
+  function pickA(el, isCorrect) {
+    resetA();
+    document.querySelectorAll('#optsA .q-opt').forEach(function (o) {
+      if (o.dataset.k === 'B') { o.classList.add('correct'); }
+      else { o.classList.add('dim'); }
+    });
+    if (!isCorrect) { el.classList.remove('dim'); el.classList.add('wrong'); }
+  }
+  function pickB(isCorrect, chosen) {
+    var v = document.getElementById('verdictB');
+    var s = document.getElementById('solB');
+    var e = document.getElementById('explB');
+    if (isCorrect) {
+      v.textContent = 'Richtig!';
+      v.className = 'q-verdict ok';
+      s.innerHTML = '<strong>Zagreb</strong>';
+      e.textContent = 'Zagreb liegt im Landesinneren, Split und Dubrovnik an der Küste.';
+    } else {
+      v.textContent = 'Leider falsch';
+      v.className = 'q-verdict no';
+      s.innerHTML = 'Deine Antwort: ' + chosen + '<br>Richtig ist: <strong>Zagreb</strong>';
+      e.textContent = 'Zagreb liegt im Landesinneren, Split und Dubrovnik an der Küste.';
+    }
+    document.getElementById('cardB').classList.add('flipped');
+  }
+  function resetB() {
+    document.getElementById('cardB').classList.remove('flipped');
+  }
+</script>

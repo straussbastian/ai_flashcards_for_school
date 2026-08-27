@@ -1,0 +1,164 @@
+<style>
+  .k-stage {
+    background: radial-gradient(120% 90% at 50% 0%, #2a3138 0%, #16191d 70%), #16191d;
+    position: relative;
+    border-radius: 12px;
+    padding: 26px 0 22px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin-bottom: 1.5rem;
+  }
+  .k-stage::after {
+    content: ""; position: absolute; inset: 0; pointer-events: none; border-radius: 12px;
+    background-image: linear-gradient(rgba(255,255,255,.028) 1px, transparent 1px),
+                      linear-gradient(90deg, rgba(255,255,255,.028) 1px, transparent 1px);
+    background-size: 22px 22px;
+  }
+  .k-col { display: flex; flex-direction: column; align-items: center; gap: 14px; position: relative; z-index: 1; }
+  .k-tag { font-size: .7rem; letter-spacing: .08em; text-transform: uppercase; color: #7b8996; }
+
+  /* --- Flip-Mechanik, für alle drei gleich --- */
+  .k-card { width: 190px; height: 190px; perspective: 1100px; cursor: pointer; }
+  .k-inner {
+    position: relative; width: 100%; height: 100%;
+    transition: transform .55s cubic-bezier(.2,.7,.3,1);
+    transform-style: preserve-3d;
+  }
+  .k-card.flipped .k-inner { transform: rotateY(180deg); }
+  .k-face {
+    position: absolute; inset: 0;
+    backface-visibility: hidden; -webkit-backface-visibility: hidden;
+    padding: 18px 16px 14px;
+    display: flex; flex-direction: column; justify-content: space-between;
+    border-radius: 2px 2px 5px 5px;
+    box-shadow: 0 18px 30px rgba(0,0,0,.55), 0 3px 6px rgba(0,0,0,.4);
+    color: #2b2410;
+  }
+  .k-back { transform: rotateY(180deg); }
+  .k-hint { font-size: .62rem; letter-spacing: .05em; text-transform: uppercase; opacity: .5; }
+  .k-q { font-size: 1.05rem; line-height: 1.3; }
+  .k-a { font-size: 1.15rem; line-height: 1.3; font-weight: 600; }
+  .k-eyebrow { font-size: .6rem; letter-spacing: .12em; text-transform: uppercase; opacity: .45; }
+
+  /* --- A: Handschrift --- */
+  .kA .k-card { transform: rotate(-3deg); }
+  .kA .k-face {
+    background: linear-gradient(158deg, #ffe57a 0%, #ffd23f 100%);
+    font-family: 'Chalkboard SE', 'Bradley Hand', 'Segoe Print', 'Comic Sans MS', cursive;
+  }
+  .kA .k-back { background: linear-gradient(158deg, #ffdf6b 0%, #f7c62f 100%); }
+
+  /* --- B: Klare Sans --- */
+  .kB .k-face {
+    background: linear-gradient(158deg, #ffe57a 0%, #ffd23f 100%);
+    font-family: system-ui, -apple-system, sans-serif;
+    letter-spacing: -.01em;
+  }
+  .kB .k-back { background: linear-gradient(158deg, #ffdf6b 0%, #f7c62f 100%); }
+
+  /* --- C: Farbcodiert --- */
+  .kC .k-card { transform: rotate(2.5deg); }
+  .kC .k-face {
+    background: linear-gradient(158deg, #a8e6cf 0%, #7fd4b4 100%);
+    font-family: system-ui, -apple-system, sans-serif;
+  }
+  .kC .k-back { background: linear-gradient(158deg, #ffc6d9 0%, #ff9dbb 100%); }
+  .kC-stack { position: relative; }
+  .kC-ghost {
+    position: absolute; width: 190px; height: 190px; border-radius: 2px 2px 5px 5px;
+    box-shadow: 0 10px 20px rgba(0,0,0,.4);
+  }
+  .kC-g1 { background: #ffd23f; transform: rotate(-5deg) translate(-8px, 6px); }
+  .kC-g2 { background: #b8b5ff; transform: rotate(-1deg) translate(4px, 3px); }
+
+  .k-note { text-align: center; font-size: .78rem; color: #7b8996; max-width: 210px; }
+</style>
+
+<h2>Die Karte: Schrift und Umklappen</h2>
+<p class="subtitle">Alle drei klappen gleich um — 3D-Drehung um die senkrechte Achse, 0,55&nbsp;Sekunden. <strong>Klick die Karten wirklich an</strong>, dann siehst du die Bewegung. Unterschied ist Schrift und Farbführung. Deine Wahl darunter.</p>
+
+<div class="k-stage">
+
+  <div class="k-col kA">
+    <div class="k-tag">A — Handschrift</div>
+    <div class="k-card" onclick="event.stopPropagation(); this.classList.toggle('flipped')">
+      <div class="k-inner">
+        <div class="k-face">
+          <span class="k-eyebrow">Karte 3 / 20</span>
+          <span class="k-q">Was ist die Hauptstadt von Kroatien?</span>
+          <span class="k-hint">klick zum Umdrehen</span>
+        </div>
+        <div class="k-face k-back">
+          <span class="k-eyebrow">Antwort</span>
+          <span class="k-a">Zagreb</span>
+          <span class="k-hint">← zurück · weiter →</span>
+        </div>
+      </div>
+    </div>
+    <p class="k-note">Wie von Hand geschrieben. Warm, kindgerecht — aber bei langen Fragen schlechter lesbar, und die Schrift muss als Webfont mitgeliefert werden.</p>
+  </div>
+
+  <div class="k-col kB">
+    <div class="k-tag">B — Klare Sans</div>
+    <div class="k-card" onclick="event.stopPropagation(); this.classList.toggle('flipped')">
+      <div class="k-inner">
+        <div class="k-face">
+          <span class="k-eyebrow">Karte 3 / 20</span>
+          <span class="k-q">Was ist die Hauptstadt von Kroatien?</span>
+          <span class="k-hint">klick zum Umdrehen</span>
+        </div>
+        <div class="k-face k-back">
+          <span class="k-eyebrow">Antwort</span>
+          <span class="k-a">Zagreb</span>
+          <span class="k-hint">← zurück · weiter →</span>
+        </div>
+      </div>
+    </div>
+    <p class="k-note">Nüchterne Systemschrift, gerade ausgerichtet. Maximal lesbar, trägt auch lange Fragen und Markdown-Listen. Der Post-it-Effekt kommt allein aus Farbe und Schatten.</p>
+  </div>
+
+  <div class="k-col kC">
+    <div class="k-tag">C — Farbcodiert</div>
+    <div class="kC-stack">
+      <div class="kC-ghost kC-g1"></div>
+      <div class="kC-ghost kC-g2"></div>
+      <div class="k-card" onclick="event.stopPropagation(); this.classList.toggle('flipped')">
+        <div class="k-inner">
+          <div class="k-face">
+            <span class="k-eyebrow">Karte 3 / 20</span>
+            <span class="k-q">Was ist die Hauptstadt von Kroatien?</span>
+            <span class="k-hint">klick zum Umdrehen</span>
+          </div>
+          <div class="k-face k-back">
+            <span class="k-eyebrow">Antwort</span>
+            <span class="k-a">Zagreb</span>
+            <span class="k-hint">← zurück · weiter →</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <p class="k-note">Jede Karte im Stapel hat eine andere Post-it-Farbe, die Rückseite kontrastiert. Lebendig und man sieht, dass ein Stapel dahinter liegt — aber Grün/Rot als Ergebnisfarbe wird unschärfer.</p>
+  </div>
+
+</div>
+
+<div class="options">
+  <div class="option" data-choice="handschrift" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content"><h3>Handschrift</h3><p>Charakter vor Lesbarkeit. Passt zu jüngeren Klassen und kurzen Vokabelkarten.</p></div>
+  </div>
+  <div class="option" data-choice="sans" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content"><h3>Klare Sans <em>(Empfehlung)</em></h3><p>Lesbarkeit vor Charakter. Der Post-it-Look entsteht durch Farbe, Schatten und die leichte Schräglage — dafür braucht es keine Schreibschrift. Trägt auch eine Frage mit fünf Zeilen und Aufzählung.</p></div>
+  </div>
+  <div class="option" data-choice="farbcodiert" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content"><h3>Farbcodiert + Stapel</h3><p>Bunte Karten mit sichtbarem Stapel dahinter. Schönster erster Eindruck, aber die Ampelfarben am Quiz-Ende müssen sich gegen viel Farbe durchsetzen.</p></div>
+  </div>
+</div>
+
+<div class="section" style="margin-top:1.25rem">
+  <div class="label">Nicht entweder/oder</div>
+  <p>Der Stapel-Effekt aus C lässt sich mit B kombinieren: gelbe Karten, aber zwei angedeutete Karten dahinter, damit man sieht, wie viel noch kommt. Sag einfach, wenn du das willst.</p>
+</div>
