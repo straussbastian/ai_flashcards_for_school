@@ -106,6 +106,12 @@ async def klient(datenbank_override: None) -> AsyncGenerator[httpx2.AsyncClient,
     Bekommt denselben Datenbank-Override wie "client", aus demselben Grund:
     Die Absicherung gegen die Entwicklungsdatenbank darf nicht davon
     abhaengen, dass eine Testdatei daran denkt.
+
+    Achtung: ASGITransport fuehrt anders als TestClient keinen Lifespan
+    (startup/shutdown) aus. Heute folgenlos, da app.main keine
+    Lifespan-Handler registriert - kommt spaeter einer dazu, liefe er in
+    allen Tests ueber "klient" still nicht mit, waehrend Tests ueber
+    "client" ihn ausfuehren.
     """
     transport = httpx2.ASGITransport(app=app)
     async with httpx2.AsyncClient(transport=transport, base_url="http://test") as instanz:
