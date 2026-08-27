@@ -1,4 +1,5 @@
-from app.markdown import rendern
+import pytest
+from app.markdown import rendern, MarkdownZuLang
 
 
 def test_fettschrift_wird_gerendert():
@@ -62,3 +63,39 @@ def test_href_attribut_wird_entfernt():
     ergebnis = rendern("<a href=\"javascript:alert(1)\">Link</a>")
     assert "href" not in ergebnis.lower()
     assert "javascript" not in ergebnis.lower()
+
+
+def test_text_knapp_unter_grenze_wird_gerendert():
+    """Ein Text knapp unter MAX_LAENGE wird normal gerendert."""
+    text = "a" * 4999
+    ergebnis = rendern(text)
+    assert ergebnis  # Sollte nicht leer sein
+    assert "a" in ergebnis
+
+
+def test_text_ueber_grenze_loest_ausnahme_aus():
+    """Ein Text über MAX_LAENGE löst MarkdownZuLang mit beiden Zahlen aus."""
+    text = "a" * 5001
+    with pytest.raises(MarkdownZuLang) as info:
+        rendern(text)
+
+    fehler_text = str(info.value)
+    assert "5001" in fehler_text  # Tatsächliche Länge
+    assert "5000" in fehler_text  # Erlaubte Länge
+    # Prüfe, dass die Nachricht verständlich ist
+    assert "Zeichen" in fehler_text or "lang" in fehler_text.lower()
+
+
+def test_tief_verschachteltes_markdown_an_grenze_ist_schnell():
+    """Tief verschachtelte Listen sollten schnell fehlschlagen, nicht lange rechnen."""
+    # Erzeuge tief verschachtelte Listen nahe der Grenze
+    # Jede Ebene: "- " (2 Zeichen) + Text (~20) + Newline (1) ≈ 24 Zeichen pro Ebene
+    # Bei 5000 Zeichen: ~200 Ebenen möglich
+    # Wir bauen etwas, das ohne die Grenze superlinear wäre
+    verschachtelte_liste = ""
+    for i in range(250):
+        verschachtelte_liste += ("  " * i) + f"- Ebene {i}\n"
+
+    # Sollte schnell fehlschlagen, nicht ewig rechnen
+    with pytest.raises(MarkdownZuLang):
+        rendern(verschachtelte_liste)
