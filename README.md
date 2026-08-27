@@ -69,6 +69,24 @@ uv run pytest
 Die Container-Tests bauen das Image und brauchen ein laufendes Docker. Ohne
 Docker werden sie übersprungen.
 
+## Tests in GitHub Actions
+
+Bei jedem Push und jedem Pull Request läuft `.github/workflows/tests.yml`:
+Datenbank aus derselben `compose.dev.yml` hochfahren, warten bis PostgreSQL
+über TCP antwortet, Testdatenbank anlegen, `alembic upgrade head`, dann
+`alembic check` – das schlägt an, sobald Modelle und Migrationen
+auseinanderlaufen – und zuletzt `uv run pytest -v`.
+
+Auf dem Runner gibt es keine `.env`. Die Umgebungsvariablen stehen im
+Workflow, damit die **vollständige** Suite läuft und nichts übersprungen wird.
+Es sind erkennbare Wegwerfwerte für die Wegwerfdatenbank des Runners und
+absichtlich im Klartext – keine Geheimnisse. Die echten Werte für den Betrieb
+werden in Coolify gesetzt.
+
+Die Container-Tests bauen das Image mit kaltem Cache; der Lauf dauert deshalb
+einige Minuten. Ob er durchgelaufen ist, steht unter *Actions* im Repository
+sowie als Häkchen neben dem Commit und bei den Checks eines Pull Requests.
+
 ## Betrieb auf Coolify
 
 Coolify zieht sich das Repository selbst per CI/CD. Einzurichten ist dort:

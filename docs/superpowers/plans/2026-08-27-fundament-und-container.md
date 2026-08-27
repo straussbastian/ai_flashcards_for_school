@@ -46,7 +46,6 @@ Diese Dateien entstehen in diesem Plan:
 | `migrations/` | Alembic-Umgebung und Migrationen |
 | `docker/entrypoint.sh` | Volume-Prüfung, Cluster anlegen, supervisord starten |
 | `docker/app-start.sh` | Auf Postgres warten, migrieren, uvicorn starten |
-| `docker/backup.sh` | Nächtlicher Dump nach `/data/backups` |
 | `docker/supervisord.conf` | Prozessverwaltung |
 | `Dockerfile`, `.dockerignore` | Image |
 | `README.md` | Betrieb, besonders der Volume-Mount |
@@ -1203,7 +1202,7 @@ git commit -m "Markdown-Rendering mit Saeuberung"
 ### Task 7: Der Container
 
 **Files:**
-- Create: `Dockerfile`, `.dockerignore`, `docker/entrypoint.sh`, `docker/app-start.sh`, `docker/backup.sh`, `docker/supervisord.conf`
+- Create: `Dockerfile`, `.dockerignore`, `docker/entrypoint.sh`, `docker/app-start.sh`, `docker/db-init.sh`, `docker/supervisord.conf`
 - Test: `tests/test_container.py`
 
 **Interfaces:**
@@ -1369,7 +1368,7 @@ if ! mountpoint -q /data; then
     echo "WARNUNG: /data ist kein Volume. Daten gehen beim Stoppen verloren." >&2
 fi
 
-mkdir -p /data/pgdata /data/backups
+mkdir -p /data/pgdata
 chown -R postgres:postgres /data/pgdata
 chmod 700 /data/pgdata
 
@@ -1416,24 +1415,6 @@ exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded
 
 `--proxy-headers` ist nötig, weil Coolify einen Reverse Proxy davorsetzt und die Anwendung sonst `http` statt `https` sieht.
 
-- [ ] **Step 6: Backup-Skript schreiben**
-
-`docker/backup.sh`:
-
-```bash
-#!/usr/bin/env bash
-set -euo pipefail
-
-# Coolifys Datenbank-Backups greifen nicht, weil Postgres im App-Container laeuft.
-# Deshalb ein eigener Dump ins selbe Volume, das Deployments ueberlebt.
-ZIEL="/data/backups/flashcards-$(date +%Y-%m-%d-%H%M).sql.gz"
-pg_dump -U flashcards -h localhost flashcards | gzip > "$ZIEL"
-echo "Backup geschrieben: $ZIEL"
-
-# Nur die sieben juengsten behalten.
-ls -1t /data/backups/flashcards-*.sql.gz | tail -n +8 | xargs -r rm --
-```
-
 - [ ] **Step 7: Prozessverwaltung schreiben**
 
 `docker/supervisord.conf`:
@@ -1465,14 +1446,6 @@ stdout_logfile_maxbytes=0
 stderr_logfile=/dev/fd/2
 stderr_logfile_maxbytes=0
 
-[program:backup]
-command=/bin/bash -c "while true; do sleep 86400; /app/docker/backup.sh || true; done"
-autorestart=true
-priority=30
-stdout_logfile=/dev/fd/1
-stdout_logfile_maxbytes=0
-stderr_logfile=/dev/fd/2
-stderr_logfile_maxbytes=0
 ```
 
 - [ ] **Step 8: `.dockerignore` schreiben**
@@ -1503,7 +1476,7 @@ Schlägt der zweite Test fehl, zuerst `docker logs` des Testcontainers ansehen �
 
 ```bash
 git add Dockerfile .dockerignore docker tests/test_container.py
-git commit -m "Container mit PostgreSQL, supervisord, Volume-Pruefung und Backup"
+git commit -m "Container mit PostgreSQL, supervisord und Volume-Pruefung"
 ```
 
 ---
@@ -1586,16 +1559,6 @@ Coolify zieht sich das Repository selbst per CI/CD. Einzurichten ist dort:
 3. Umgebungsvariablen aus `.env.example` setzen, `BASE_URL` auf die echte Domain
 4. Domain zuweisen, HTTPS aktivieren
 5. Healthcheck auf `/healthz`
-
-## Backups
-
-Ein Dump landet täglich unter `/data/backups`, sieben Generationen werden
-behalten. Wiederherstellen:
-
-```bash
-gunzip -c /data/backups/flashcards-JJJJ-MM-TT-HHMM.sql.gz \
-  | psql -U flashcards -d flashcards
-```
 
 ## Aufbau
 
@@ -1704,9 +1667,54 @@ Damit liegt im Repository alles, was Coolify später braucht: `Dockerfile`, doku
 
 ---
 
+---
+
+### Task 9: Tests in GitHub Actions
+
+**Files:**
+- Create: `.github/workflows/tests.yml`
+- Modify: `README.md` (kurzer Abschnitt zur CI)
+
+**Interfaces:**
+- Consumes: `compose.dev.yml`, `pyproject.toml`, `uv.lock`, die gesamte Testsuite
+- Produces: einen Workflow, der bei jedem Push und jedem Pull Request die Suite laufen lässt
+
+Nachträglich aufgenommen auf Wunsch des Auftraggebers. Der Anlass war ein echter Befund: Auf einem frischen Checkout ohne `.env` brach das Einsammeln der Tests ab, statt sauber zu überspringen — genau die Situation, in der ein GitHub-Runner steckt. Das ist inzwischen behoben; die CI hält es künftig fest.
+
+**Bewusst keine eigene `compose.test.yml`.** Der Workflow fährt dieselbe `compose.dev.yml` hoch, die lokal schon benutzt wird. Zwei Compose-Dateien, die dasselbe PostgreSQL beschreiben, driften auseinander, und dann ist grün in der CI und rot auf dem Rechner — oder umgekehrt. Eine Datei, zwei Verwender.
+
+- [ ] **Step 1: Workflow anlegen**
+
+`.github/workflows/tests.yml`, ausgelöst bei `push` und `pull_request`. Ablauf:
+
+1. Repository auschecken
+2. `uv` installieren (`astral-sh/setup-uv`), Abhängigkeiten mit `uv sync --frozen` holen
+3. `docker compose -f compose.dev.yml up -d` und warten, bis PostgreSQL bereit ist (`pg_isready` in einer Schleife, nicht blind `sleep`)
+4. Testdatenbank `flashcards_test` anlegen
+5. Umgebungsvariablen setzen — dieselben Namen wie in `.env.example`, mit offensichtlichen CI-Werten
+6. `uv run alembic upgrade head`, danach `uv run alembic check` — schlägt an, sobald Modelle und Migration auseinanderlaufen. Das schließt die Lücke aus Task 4, wo die Deckungsgleichheit nur von Hand geprüft wurde.
+7. `uv run pytest -v`
+
+Die Container-Tests bauen das Image und brauchen dafür einige Minuten. Das ist gewollt: Sie prüfen genau die Eigenschaft, an der das Projekt sonst scheitert — dass die Daten einen neuen Container auf demselben Volume überleben.
+
+- [ ] **Step 2: Workflow prüfen**
+
+Vor dem Commit lokal durchdenken, was auf dem Runner anders ist als auf dem Entwicklungsrechner: keine `.env`, andere Architektur (amd64 statt aarch64), kalter Docker-Cache, keine bereits laufende Datenbank. Jede dieser Abweichungen ist ein möglicher Fehlschlag.
+
+- [ ] **Step 3: README ergänzen**
+
+Ein kurzer Abschnitt: Was die CI prüft und woran man sieht, dass sie durchgelaufen ist.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add .github README.md
+git commit -m "Tests in GitHub Actions"
+```
+
 ## Selbstprüfung des Plans
 
-**Abdeckung der Spec:** Abschnitt 3 der Spec (Architektur, Volume, Backups, Routen `/healthz` und `/`, Konfiguration) liegt in den Tasks 1, 2, 3, 7 und 8. Abschnitt 4 (Datenmodell, Constraints, Slug-Erzeugung) in den Tasks 4 und 5. Das Markdown-Rendering aus Abschnitt 6 in Task 6.
+**Abdeckung der Spec:** Abschnitt 3 der Spec (Architektur, Volume, Routen `/healthz` und `/`, Konfiguration) liegt in den Tasks 1, 2, 3, 7 und 8. Abschnitt 4 (Datenmodell, Constraints, Slug-Erzeugung) in den Tasks 4 und 5. Das Markdown-Rendering aus Abschnitt 6 in Task 6.
 
 **Bewusst nicht in diesem Plan** und den Folgeplänen zugeordnet:
 
