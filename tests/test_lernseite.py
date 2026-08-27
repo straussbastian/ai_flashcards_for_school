@@ -113,14 +113,35 @@ async def test_adresse_mit_angehaengtem_zeilenumbruch_ergibt_404(klient, session
 
 async def test_adresse_mit_ueberlangem_wort_ergibt_404(klient, session):
     # bundles.slug ist auf 120 Zeichen begrenzt (app/models.py); eine Adresse
-    # mit einem Wort ueber der im Muster erlaubten Laenge (40 Zeichen) kann
+    # mit einem Wort ueber der im Muster erlaubten Laenge (39 Zeichen) kann
     # nie existieren und muss die Datenbank nicht fragen - siehe Kommentar
     # bei ADRESSE in app/routen/lernseite.py.
-    zu_lang = "a" * 41
+    zu_lang = "a" * 40
     urspruenglicher_override = app.dependency_overrides[get_session]
     app.dependency_overrides[get_session] = lambda: _DatenbankVerboten()
     try:
         antwort = await klient.get(f"/{zu_lang}-tafel-leuchtet")
+    finally:
+        app.dependency_overrides[get_session] = urspruenglicher_override
+
+    assert antwort.status_code == 404
+
+
+async def test_adresse_ueber_der_spaltenlaenge_ergibt_404(klient, session):
+    # Nachzuegler aus Plan 3 Task 3: ADRESSE erlaubte frueher bis zu 40
+    # Zeichen je Wortgruppe (3*40+2=122), obwohl bundles.slug (app/models.py)
+    # nur 120 Zeichen fasst - eine 121 Zeichen lange Adresse passte damit
+    # trotzdem durchs Muster und fragte doch die Datenbank, obwohl der
+    # Kommentar bei ADRESSE in app/routen/lernseite.py das Gegenteil zusagte.
+    # Diese Adresse ist genau 121 Zeichen lang (40+1+40+1+39) - mit dem
+    # korrigierten Muster ({1,39} je Wortgruppe) darf sie die Datenbank nicht
+    # erreichen.
+    adresse = "a" * 40 + "-" + "b" * 40 + "-" + "c" * 39
+    assert len(adresse) == 121
+    urspruenglicher_override = app.dependency_overrides[get_session]
+    app.dependency_overrides[get_session] = lambda: _DatenbankVerboten()
+    try:
+        antwort = await klient.get(f"/{adresse}")
     finally:
         app.dependency_overrides[get_session] = urspruenglicher_override
 

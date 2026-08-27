@@ -6,9 +6,12 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.routen import lernseite, system
 from app.routen.lernseite import _nicht_gefunden
+from app.sicherheit import Schutzkoepfe
 from app.templates import VERZEICHNIS
 
 app = FastAPI(title="Flashcards", docs_url=None, redoc_url=None, openapi_url=None)
+
+app.add_middleware(Schutzkoepfe)
 
 app.mount("/static", StaticFiles(directory=str(VERZEICHNIS.parent / "static")), name="static")
 

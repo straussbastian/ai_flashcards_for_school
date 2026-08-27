@@ -18,11 +18,14 @@ router = APIRouter()
 # /favicon.ico und alles andere schlucken und fuer jeden Unsinn die
 # Datenbank fragen.
 #
-# {1,40} statt des unbegrenzten [a-z]+ aus tests/test_slug.py: 40 Zeichen
+# {1,39} statt des unbegrenzten [a-z]+ aus tests/test_slug.py: 39 Zeichen
 # fassen das laengste Wort in app/woerter (10 Zeichen) grosszuegig, und
-# bundles.slug ist auf 120 Zeichen begrenzt (siehe app/models.py) - eine
-# Adresse ueber dieser Laenge kann nie existieren und muss die Datenbank
-# gar nicht erst fragen.
+# bundles.slug ist auf 120 Zeichen begrenzt (siehe app/models.py). Mit drei
+# Wortgruppen zu je hoechstens 39 Zeichen plus zwei Bindestrichen passt eine
+# Adresse hoechstens in 3*39+2=119 Zeichen - eine Adresse ueber der
+# Spaltengrenze von 120 kann damit nie matchen und muss die Datenbank gar
+# nicht erst fragen. (Mit dem frueheren Wert 40 waeren es 3*40+2=122
+# gewesen - zwei Zeichen mehr, als die Spalte je fassen kann.)
 #
 # Das Muster wird unten von Hand mit re.fullmatch geprueft und NICHT ueber
 # Path(pattern=ADRESSE) an Pydantic gegeben: Eine per Path(pattern=...)
@@ -40,7 +43,7 @@ router = APIRouter()
 # widersprach der Zusage weiter unten, dass die Datenbank fuer Unsinn gar
 # nicht erst gefragt wird. re.fullmatch verankert an beiden Enden ohne
 # dieses Schlupfloch und macht die "^"/"$"-Anker im Muster ueberfluessig.
-ADRESSE = r"[a-z]{1,40}-[a-z]{1,40}-[a-z]{1,40}"
+ADRESSE = r"[a-z]{1,39}-[a-z]{1,39}-[a-z]{1,39}"
 
 
 def _nicht_gefunden(request: Request) -> HTMLResponse:
