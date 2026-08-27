@@ -814,9 +814,13 @@ from app.config import get_settings
 from app.db import Base
 from app import models  # noqa: F401  -- sorgt dafuer, dass die Tabellen registriert sind
 
-config.set_main_option("sqlalchemy.url", get_settings().database_url)
+datenbank_url = get_settings().database_url
 target_metadata = Base.metadata
 ```
+
+**Die URL darf nicht über `config.set_main_option()` laufen.** Alembic reicht den Wert an einen `ConfigParser` weiter, für den `%` das Interpolationszeichen ist. Ein Datenbankpasswort mit `%` – bei URL-kodierten Passwörtern der Normalfall, `%40` für `@` – lässt dann jedes `alembic upgrade` mit `InterpolationSyntaxError` scheitern. Weil die Migration im Container beim Start läuft, würde das den Start kippen, und zwar erst auf dem Server.
+
+Reiche die URL stattdessen direkt weiter: im Offline-Pfad als `url=datenbank_url`, im Online-Pfad in das Dict, das `config.get_section()` liefert, bevor es an `async_engine_from_config` geht.
 
 - [ ] **Step 6: Migration erzeugen und prüfen**
 
