@@ -149,8 +149,17 @@ Coolify zieht sich das Repository selbst per CI/CD. Einzurichten ist dort:
 ## Inhalte pflegen
 
 Es gibt bewusst **keine Administrationsoberfläche**. Die Lernseiten werden
-später ausschließlich über einen MCP-Server gepflegt, den ein KI-Agent
-bedient. Dieser Teil ist noch nicht gebaut.
+ausschließlich über den MCP-Server unter `POST /mcp` gepflegt, den ein
+KI-Agent bedient – abgesichert mit OAuth 2.1 und dem `TEACHER_PASSWORD`.
+
+Acht Werkzeuge stehen bereit: `bundle_anlegen`, `bundle_liste`,
+`bundle_anzeigen`, `bundle_aendern`, `karten_hinzufuegen`, `karte_aendern`,
+`karte_loeschen` und `bundle_deaktivieren`. Endgültiges Löschen gibt es
+darüber bewusst nicht – `bundle_deaktivieren` schaltet ein Lernpaket
+unsichtbar, ohne etwas wegzuwerfen.
+
+Wie du den Server mit Claude Cowork verbindest, steht in
+[docs/praxistest-cowork.md](docs/praxistest-cowork.md).
 
 ## Aufbau
 

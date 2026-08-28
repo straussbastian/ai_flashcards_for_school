@@ -9,6 +9,17 @@ set -euo pipefail
 # an localhost lauscht (Bindung an 127.0.0.1 erzwingt diese Beschraenkung)
 # und keine echten Daten enthaelt. Fuer den Betrieb werden die Werte in
 # Coolify gesetzt und tauchen nirgends im Git auf.
+#
+# BASE_URL und TEACHER_PASSWORD lassen sich aus der Umgebung ueberschreiben.
+# Gebraucht wird das fuer den Praxistest mit Claude Cowork (siehe
+# docs/praxistest-cowork.md): Cowork erreicht den Server aus Anthropics
+# Cloud, also ueber einen Tunnel, und saemtliche OAuth-URLs entstehen
+# ausschliesslich aus BASE_URL. Der Server muss seine oeffentliche Adresse
+# deshalb schon beim Start kennen.
+#
+# ACHTUNG: Wer BASE_URL auf eine Tunneladresse setzt, macht diesen Container
+# oeffentlich erreichbar. Dann bitte auch TEACHER_PASSWORD setzen - sonst
+# steht das Entwicklungspasswort aus dieser Datei vor der Tuer.
 
 NAME=flashcards-lokal
 DATEN="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/daten"
@@ -41,8 +52,8 @@ docker run -d --name "$NAME" \
     -e POSTGRES_PASSWORD=nur-lokal-entwicklung \
     -e DATABASE_URL='postgresql+psycopg://flashcards:nur-lokal-entwicklung@localhost:5432/flashcards' \
     -e APP_SECRET=nur-lokal-entwicklung-kein-echtes-geheimnis \
-    -e TEACHER_PASSWORD=nur-lokal-entwicklung \
-    -e BASE_URL=http://localhost:8000 \
+    -e TEACHER_PASSWORD="${TEACHER_PASSWORD:-nur-lokal-entwicklung}" \
+    -e BASE_URL="${BASE_URL:-http://localhost:8000}" \
     -p 127.0.0.1:8000:8000 \
     flashcards
 
