@@ -127,6 +127,22 @@ jobs:
         # Runner bereit, also laufen auch die Container-Tests.
         run: uv run pytest -v
 
+      - name: Chromium fuer die Browsertests installieren
+        # --with-deps holt die Systembibliotheken mit, die Chromium auf
+        # einem nackten ubuntu-latest braucht. Ohne sie startet der
+        # Browser mit einem Fehler ueber eine fehlende .so-Datei, und das
+        # sieht nach einem kaputten Test aus statt nach einem fehlenden
+        # Paket.
+        run: uv run playwright install --with-deps chromium
+
+      - name: Browsertests ausfuehren
+        # Ausdruecklich "-m browser": Die Markierung ueberschreibt das
+        # "-m 'not browser'" aus pyproject.toml, mit dem der Schritt
+        # darueber sie nicht ausgewaehlt hat. Die Tests starten sich
+        # ihren eigenen Uvicorn auf einem freien Port und legen ihre
+        # Bundles in der Testdatenbank an (siehe tests/browser/conftest.py).
+        run: uv run pytest -m browser -v
+
       - name: Datenbanklogs bei Fehlschlag
         if: failure()
         run: docker compose -f compose.dev.yml logs db
