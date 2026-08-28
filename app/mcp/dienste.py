@@ -10,7 +10,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.mcp.eingaben import KarteEingabe
+from app.mcp.eingaben import KarteAenderung, KarteEingabe
 from app.mcp.fehler import MCPFehler
 from app.mcp.karten import beschreibung_pruefen, karte_pruefen, klasse_pruefen, titel_pruefen
 from app.models import Bundle, Karte
@@ -139,3 +139,184 @@ async def bundles_auflisten(
     if nur_aktive:
         abfrage = abfrage.where(Bundle.aktiv.is_(True))
     return [(bundle, anzahl) for bundle, anzahl in (await sitzung.execute(abfrage)).all()]
+
+
+
+async def karten_zaehlen(sitzung: AsyncSession, bundle_id) -> int:
+    """Die aktuelle Kartenzahl eines Lernpakets, frisch aus der Datenbank.
+
+    Bewusst eine Abfrage statt len(bundle.karten): Die geladene Sammlung
+    kommt aus der Identity Map und weiss nichts von einer Karte, die in
+    derselben Sitzung gerade eingefuegt oder geloescht wurde. Ein Werkzeug,
+    das dann eine zu niedrige Zahl meldet, waere still falsch.
+    """
+    return await sitzung.scalar(
+        select(func.count(Karte.id)).where(Karte.bundle_id == bundle_id)
+    )
+
+
+async def karten_anhaengen(
+    sitzung: AsyncSession, slug: str, karten: list[KarteEingabe]
+) -> tuple[Bundle, list[Karte]]:
+    """Haengt Karten hinten an ein bestehendes Lernpaket an.
+
+    Alles oder nichts, wie bei bundle_anlegen: Erst werden alle Karten
+    geprueft, dann wird geschrieben. Eine halb angelegte Lieferung waere
+    schlimmer als keine.
+
+    Die neue Position ist max(position) + 1 und ausdruecklich NICHT die
+    Anzahl der Karten (Entscheidung E-5). Nach dem Loeschen einer mittleren
+    Karte gibt es Luecken; "anzahl" traefe dann eine bereits vergebene
+    Position und liefe in uq_karten_bundle_position.
+
+    Returns:
+        Das Lernpaket und die neu angelegten Karten in der Reihenfolge der
+        Uebergabe.
+
+    Raises:
+        MCPFehler: Wenn es das Lernpaket nicht gibt oder eine Karte nicht
+            durch die Pruefung kommt.
+    """
+    if not karten:
+        raise MCPFehler(
+            "Es wurden keine Karten übergeben. Bitte gib mindestens eine "
+            "Karte an."
+        )
+    bundle = await bundle_holen(sitzung, slug)
+    geprueft = [karte_pruefen(eine, nummer) for nummer, eine in enumerate(karten, start=1)]
+
+    hoechste = await sitzung.scalar(
+        select(func.max(Karte.position)).where(Karte.bundle_id == bundle.id)
+    )
+    naechste = 0 if hoechste is None else hoechste + 1
+
+    neue = [
+        Karte(bundle_id=bundle.id, position=naechste + abstand, **werte)
+        for abstand, werte in enumerate(geprueft)
+    ]
+    sitzung.add_all(neue)
+    await sitzung.flush()
+    # Die Sammlung bundle.karten wurde beim Laden gefuellt und kennt die
+    # neuen Karten nicht. expire() zwingt den naechsten Zugriff, sie neu zu
+    # laden - sonst zeigte bundle_anzeigen im selben Ablauf einen veralteten
+    # Stand.
+    sitzung.expire(bundle, ["karten"])
+    return bundle, neue
+
+
+def _als_eingabe(karte: Karte, aenderung: KarteAenderung) -> KarteEingabe:
+    """Legt die Aenderung ueber die bestehende Karte.
+
+    Was nicht angegeben ist, bleibt, wie es war. Das Ergebnis geht durch
+    dasselbe karte_pruefen() wie eine neue Karte - es gibt keine zweite,
+    schwaechere Pruefung fuer den Aenderungsweg.
+
+    Die richtige Antwort wird dabei als TEXT uebernommen, nicht als Index:
+    Wandert die Antwortliste, muss der Text darin wiedergefunden werden.
+    Genau das ist die Stelle, an der eine Zuordnung sonst still verrutscht.
+    """
+    alte_antworten = list(karte.antworten or [])
+    alte_richtige = (
+        alte_antworten[karte.richtige_index]
+        if karte.richtige_index is not None and karte.richtige_index < len(alte_antworten)
+        else None
+    )
+    return KarteEingabe(
+        # art bleibt, wie sie ist: Eine Flashcard und eine Frage haben
+        # verschiedene Pflichtfelder. Wer die Art wechseln will, loescht die
+        # Karte und legt eine neue an - so steht es auch im Docstring von
+        # KarteAenderung.
+        art=karte.art,
+        vorderseite=(
+            aenderung.vorderseite if aenderung.vorderseite is not None else karte.vorderseite
+        ),
+        rueckseite=(
+            aenderung.rueckseite if aenderung.rueckseite is not None else karte.rueckseite
+        ),
+        antworten=(
+            aenderung.antworten if aenderung.antworten is not None else alte_antworten or None
+        ),
+        richtige_antwort=(
+            aenderung.richtige_antwort
+            if aenderung.richtige_antwort is not None
+            else alte_richtige
+        ),
+        erklaerung=(
+            aenderung.erklaerung if aenderung.erklaerung is not None else karte.erklaerung
+        ),
+    )
+
+
+async def karte_aendern(
+    sitzung: AsyncSession, karte_id: str, aenderung: KarteAenderung
+) -> tuple[Bundle, Karte]:
+    """Aendert einzelne Felder einer Karte.
+
+    Geaendert wird ueber das ORM-Objekt und nicht mit einem
+    update()-Statement: geaendert_am traegt onupdate=func.now() und wird
+    damit nur vom ORM gesetzt. Ein update() liesse die Spalte stehen.
+
+    Raises:
+        MCPFehler: Wenn die ID keine ist, die Karte nicht existiert, gar
+            kein Feld angegeben wurde oder die geaenderte Karte die Pruefung
+            nicht besteht.
+    """
+    if not aenderung.model_dump(exclude_none=True):
+        raise MCPFehler(
+            "Es wurde kein Feld zum Ändern angegeben. Bitte gib an, was sich "
+            "ändern soll – zum Beispiel 'vorderseite' oder 'erklaerung'. Mit "
+            "bundle_anzeigen siehst du, was aktuell auf der Karte steht."
+        )
+    karte = await karte_holen(sitzung, karte_id)
+    # nummer=1: Die Meldungen aus karte_pruefen stellen "Die Karte auf
+    # Position 1" voran. Bei einer einzeln angesprochenen Karte waere jede
+    # Nummer irrefuehrend; deshalb wird der Ortszusatz hier ersetzt.
+    geprueft = karte_pruefen(_als_eingabe(karte, aenderung), nummer=1)
+
+    for feld, wert in geprueft.items():
+        setattr(karte, feld, wert)
+    await sitzung.flush()
+
+    bundle = await bundle_holen_nach_id(sitzung, karte.bundle_id)
+    return bundle, karte
+
+
+async def bundle_holen_nach_id(sitzung: AsyncSession, bundle_id) -> Bundle:
+    """Das Lernpaket zu einer ID.
+
+    Braucht keine eigene Fehlermeldung: Aufgerufen wird es ausschliesslich
+    mit einer bundle_id, die an einer geladenen Karte haengt - das
+    Fremdschluesselziel existiert dann zwangslaeufig.
+    """
+    return await sitzung.get(Bundle, bundle_id)
+
+
+async def karte_loeschen(sitzung: AsyncSession, karte_id: str) -> tuple[Bundle, int]:
+    """Loescht eine Karte und gibt das Lernpaket samt Restzahl zurueck.
+
+    Die Positionen der uebrigen Karten bleiben, wie sie sind (Entscheidung
+    E-5). Die Reihenfolge ergibt sich aus der Sortierung nach position;
+    Luecken stoeren dabei nicht, und ein Massen-update() entfaellt.
+
+    Raises:
+        MCPFehler: Wenn es die Karte nicht gibt oder sie die letzte ihres
+            Lernpakets ist.
+    """
+    karte = await karte_holen(sitzung, karte_id)
+    bundle = await bundle_holen_nach_id(sitzung, karte.bundle_id)
+
+    anzahl = await sitzung.scalar(
+        select(func.count(Karte.id)).where(Karte.bundle_id == karte.bundle_id)
+    )
+    if anzahl <= 1:
+        raise MCPFehler(
+            "Das ist die letzte Karte des Lernpakets, und ein Lernpaket ohne "
+            "Karten kann niemand üben. Wenn das Lernpaket weg soll, nimm "
+            "bundle_deaktivieren – dann bleibt es erhalten und ist nur nicht "
+            "mehr erreichbar."
+        )
+
+    await sitzung.delete(karte)
+    await sitzung.flush()
+    sitzung.expire(bundle, ["karten"])
+    return bundle, anzahl - 1

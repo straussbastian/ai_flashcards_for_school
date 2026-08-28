@@ -22,7 +22,7 @@ from pydantic import Field
 
 from app.config import get_settings
 from app.mcp import dienste
-from app.mcp.eingaben import KarteEingabe
+from app.mcp.eingaben import KarteAenderung, KarteEingabe
 from app.mcp.fehler import MCPFehler
 from app.models import Bundle
 from app.sitzung import sitzung
@@ -175,3 +175,99 @@ def registrieren(server: MCPServer) -> None:
                 **uebersicht(bundle, len(karten)),
                 "karten": [karte_ausgeben(eine) for eine in karten],
             }
+
+    @server.tool(
+        description=(
+            "Hängt weitere Karten hinten an ein bestehendes Lernpaket an "
+            "und gibt die neuen Karten mit ihren IDs zurück. Die Reihenfolge "
+            "der vorhandenen Karten bleibt unberührt.\n\n"
+            "WICHTIG für Fragen: Benutze KEINE Antwortmöglichkeiten wie "
+            "'keine der genannten' oder 'A und B sind richtig'. Die "
+            "Reihenfolge der Antworten wird bei jedem Durchlauf neu gemischt "
+            "- solche Möglichkeiten ergeben danach keinen Sinn mehr."
+        )
+    )
+    @als_werkzeug
+    async def karten_hinzufuegen(
+        slug: Annotated[str, Field(description="Die Drei-Wort-Adresse des Lernpakets.")],
+        karten: Annotated[list[KarteEingabe], Field(description="Die neuen Karten.")],
+    ) -> dict:
+        async with sitzung() as offene:
+            bundle, neue = await dienste.karten_anhaengen(offene, slug=slug, karten=karten)
+            gesamt = await dienste.karten_zaehlen(offene, bundle.id)
+            antwort = {
+                **uebersicht(bundle, gesamt),
+                "neue_karten": [karte_ausgeben(eine) for eine in neue],
+            }
+            await offene.commit()
+            return antwort
+
+    @server.tool(
+        description=(
+            "Ändert einzelne Felder einer Karte. Was nicht angegeben ist, "
+            "bleibt unverändert. Die Karten-ID bekommst du von "
+            "bundle_anzeigen.\n\n"
+            "Wenn du bei einer Frage die Antwortmöglichkeiten austauschst, "
+            "gib 'richtige_antwort' mit an - sonst muss der alte Text in der "
+            "neuen Liste noch vorkommen."
+        )
+    )
+    @als_werkzeug
+    async def karte_aendern(
+        karte_id: Annotated[str, Field(description="Die ID der Karte aus bundle_anzeigen.")],
+        vorderseite: Annotated[
+            str | None,
+            Field(default=None, description="Neuer Begriff bzw. neue Frage."),
+        ] = None,
+        rueckseite: Annotated[
+            str | None,
+            Field(default=None, description="Nur bei Flashcards: die neue Lösung."),
+        ] = None,
+        antworten: Annotated[
+            list[str] | None,
+            Field(default=None, description="Nur bei Fragen: die neuen Antwortmöglichkeiten."),
+        ] = None,
+        richtige_antwort: Annotated[
+            str | None,
+            Field(default=None, description="Nur bei Fragen: der TEXT der richtigen Antwort."),
+        ] = None,
+        erklaerung: Annotated[
+            str | None,
+            Field(default=None, description="Nur bei Fragen: die neue Erklärung."),
+        ] = None,
+    ) -> dict:
+        aenderung = KarteAenderung(
+            vorderseite=vorderseite,
+            rueckseite=rueckseite,
+            antworten=antworten,
+            richtige_antwort=richtige_antwort,
+            erklaerung=erklaerung,
+        )
+        async with sitzung() as offene:
+            bundle, karte = await dienste.karte_aendern(
+                offene, karte_id=karte_id, aenderung=aenderung
+            )
+            antwort = {
+                **uebersicht(bundle, await dienste.karten_zaehlen(offene, bundle.id)),
+                "karte": karte_ausgeben(karte),
+            }
+            await offene.commit()
+            return antwort
+
+    @server.tool(
+        description=(
+            "Löscht eine einzelne Karte aus einem Lernpaket. Die Positionen "
+            "der übrigen Karten bleiben unverändert. Die letzte Karte eines "
+            "Lernpakets lässt sich nicht löschen - dafür gibt es "
+            "bundle_deaktivieren."
+        )
+    )
+    @als_werkzeug
+    async def karte_loeschen(
+        karte_id: Annotated[str, Field(description="Die ID der Karte aus bundle_anzeigen.")],
+    ) -> dict:
+        async with sitzung() as offene:
+            bundle, uebrig = await dienste.karte_loeschen(offene, karte_id=karte_id)
+            antwort = {**uebersicht(bundle, uebrig), "geloescht": karte_id}
+            await offene.commit()
+            return antwort
