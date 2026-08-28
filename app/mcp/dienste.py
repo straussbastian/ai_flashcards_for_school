@@ -12,7 +12,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.mcp.eingaben import KarteAenderung, KarteEingabe
 from app.mcp.fehler import MCPFehler
-from app.mcp.karten import beschreibung_pruefen, karte_pruefen, klasse_pruefen, titel_pruefen
+from app.mcp.karten import (
+    beschreibung_pruefen,
+    karte_pruefen,
+    klasse_pruefen,
+    reihenfolge_pruefen,
+    titel_pruefen,
+)
 from app.models import Bundle, Karte
 from app.slug import SlugKollision, freien_slug_finden
 
@@ -320,3 +326,77 @@ async def karte_loeschen(sitzung: AsyncSession, karte_id: str) -> tuple[Bundle, 
     await sitzung.flush()
     sitzung.expire(bundle, ["karten"])
     return bundle, anzahl - 1
+
+
+# Der Unterschied zwischen "nicht angegeben" und "geleert": Bei den
+# optionalen Textfeldern heisst None "unveraendert" und ein leerer String
+# "weg". Ohne diese Trennung liesse sich eine einmal gesetzte Beschreibung
+# nie wieder loswerden.
+async def bundle_aendern(
+    sitzung: AsyncSession,
+    slug: str,
+    titel: str | None,
+    beschreibung: str | None,
+    klasse: str | None,
+    selbsteinschaetzung: bool | None,
+    reihenfolge: str | None,
+) -> Bundle:
+    """Aendert die Kopfdaten eines Lernpakets.
+
+    Die Adresse bleibt unangetastet - sie ist weitergegeben worden und darf
+    sich nicht unter den Lernenden wegbewegen, nur weil der Titel korrigiert
+    wird.
+
+    Geaendert wird ueber das ORM-Objekt, nicht mit update(): geaendert_am
+    traegt onupdate=func.now() und wird deshalb nur vom ORM gesetzt.
+
+    Raises:
+        MCPFehler: Wenn es das Lernpaket nicht gibt, kein Feld angegeben
+            wurde oder ein Wert die Pruefung nicht besteht.
+    """
+    angegeben = {
+        "titel": titel,
+        "beschreibung": beschreibung,
+        "klasse": klasse,
+        "selbsteinschaetzung": selbsteinschaetzung,
+        "reihenfolge": reihenfolge,
+    }
+    if all(wert is None for wert in angegeben.values()):
+        raise MCPFehler(
+            "Es wurde kein Feld zum Ändern angegeben. Bitte gib an, was sich "
+            "ändern soll – zum Beispiel 'titel' oder 'klasse'. Mit "
+            "bundle_anzeigen siehst du den aktuellen Stand."
+        )
+
+    bundle = await bundle_holen(sitzung, slug)
+
+    if titel is not None:
+        bundle.titel = titel_pruefen(titel)
+    if beschreibung is not None:
+        bundle.beschreibung = beschreibung_pruefen(beschreibung)
+    if klasse is not None:
+        bundle.klasse = klasse_pruefen(klasse)
+    if selbsteinschaetzung is not None:
+        bundle.selbsteinschaetzung = selbsteinschaetzung
+    if reihenfolge is not None:
+        bundle.reihenfolge = reihenfolge_pruefen(reihenfolge)
+
+    await sitzung.flush()
+    return bundle
+
+
+async def bundle_umschalten(sitzung: AsyncSession, slug: str, aktiv: bool) -> Bundle:
+    """Schaltet ein Lernpaket sichtbar oder unsichtbar.
+
+    Kein endgueltiges Loeschen ueber MCP - so verlangt es die Spec in
+    Abschnitt 5 ausdruecklich. Das Lernpaket und alle Karten bleiben
+    erhalten; die Lernseite zeigt nur einen freundlichen Hinweis. Ein
+    Versehen ist damit ein Handgriff, kein Datenverlust.
+
+    Raises:
+        MCPFehler: Wenn es das Lernpaket nicht gibt.
+    """
+    bundle = await bundle_holen(sitzung, slug)
+    bundle.aktiv = aktiv
+    await sitzung.flush()
+    return bundle

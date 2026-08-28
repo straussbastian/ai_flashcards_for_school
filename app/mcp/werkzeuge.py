@@ -271,3 +271,78 @@ def registrieren(server: MCPServer) -> None:
             antwort = {**uebersicht(bundle, uebrig), "geloescht": karte_id}
             await offene.commit()
             return antwort
+
+    @server.tool(
+        description=(
+            "Ändert die Kopfdaten eines Lernpakets: Titel, Beschreibung, "
+            "Klasse, Selbsteinschätzung, Reihenfolge. Was nicht angegeben "
+            "ist, bleibt unverändert; ein leerer Text löscht ein optionales "
+            "Feld. Die Adresse des Lernpakets ändert sich dabei nie - "
+            "bereits weitergegebene Links bleiben gültig."
+        )
+    )
+    @als_werkzeug
+    async def bundle_aendern(
+        slug: Annotated[str, Field(description="Die Drei-Wort-Adresse des Lernpakets.")],
+        titel: Annotated[
+            str | None, Field(default=None, description="Neue Überschrift der Lernseite.")
+        ] = None,
+        beschreibung: Annotated[
+            str | None,
+            Field(default=None, description="Neuer Einleitungstext. Leerer Text löscht ihn."),
+        ] = None,
+        klasse: Annotated[
+            str | None,
+            Field(default=None, description="Neue Klassenbezeichnung. Leerer Text löscht sie."),
+        ] = None,
+        selbsteinschaetzung: Annotated[
+            bool | None,
+            Field(default=None, description="Ob Flashcards beim Ergebnis mitzählen."),
+        ] = None,
+        reihenfolge: Annotated[
+            str | None,
+            Field(
+                default=None,
+                description=(
+                    "'zufall' mischt die Karten bei jedem Durchlauf, 'fest' "
+                    "zeigt sie immer in derselben Reihenfolge."
+                ),
+            ),
+        ] = None,
+    ) -> dict:
+        async with sitzung() as offene:
+            bundle = await dienste.bundle_aendern(
+                offene,
+                slug=slug,
+                titel=titel,
+                beschreibung=beschreibung,
+                klasse=klasse,
+                selbsteinschaetzung=selbsteinschaetzung,
+                reihenfolge=reihenfolge,
+            )
+            antwort = uebersicht(bundle, await dienste.karten_zaehlen(offene, bundle.id))
+            await offene.commit()
+            return antwort
+
+    @server.tool(
+        description=(
+            "Schaltet ein Lernpaket unsichtbar (aktiv=false) oder wieder "
+            "sichtbar (aktiv=true). Es wird dabei NICHTS gelöscht: Das "
+            "Lernpaket und alle Karten bleiben erhalten, die Seite zeigt nur "
+            "einen Hinweis. Endgültiges Löschen gibt es über diese Werkzeuge "
+            "bewusst nicht."
+        )
+    )
+    @als_werkzeug
+    async def bundle_deaktivieren(
+        slug: Annotated[str, Field(description="Die Drei-Wort-Adresse des Lernpakets.")],
+        aktiv: Annotated[
+            bool,
+            Field(description="false schaltet unsichtbar, true wieder sichtbar."),
+        ],
+    ) -> dict:
+        async with sitzung() as offene:
+            bundle = await dienste.bundle_umschalten(offene, slug=slug, aktiv=aktiv)
+            antwort = uebersicht(bundle, await dienste.karten_zaehlen(offene, bundle.id))
+            await offene.commit()
+            return antwort

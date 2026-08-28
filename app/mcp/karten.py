@@ -216,3 +216,21 @@ def beschreibung_pruefen(beschreibung: str | None) -> str | None:
         return None
     _laenge_pruefen(beschnitten, "beschreibung", "Die Beschreibung des Lernpakets")
     return beschnitten
+
+
+# Dieselben zwei Werte wie in ck_bundles_reihenfolge (app/models.py). Sie
+# stehen hier ein zweites Mal, damit die Ablehnung im Klartext geschieht und
+# nicht als Constraint-Verstoss - die Datenbank bleibt das Netz darunter.
+REIHENFOLGEN = ("zufall", "fest")
+
+
+def reihenfolge_pruefen(reihenfolge: str) -> str:
+    """Prueft die Abspielreihenfolge eines Lernpakets."""
+    beschnitten = (reihenfolge or "").strip()
+    if beschnitten not in REIHENFOLGEN:
+        raise MCPFehler(
+            f"„{reihenfolge}“ ist keine bekannte Reihenfolge. Erlaubt sind "
+            "„zufall“ (die Karten werden bei jedem Durchlauf gemischt) und "
+            "„fest“ (sie kommen immer in derselben Reihenfolge)."
+        )
+    return beschnitten
