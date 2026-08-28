@@ -27,11 +27,34 @@ dev = [
     "pytest>=8.3",
     "pytest-asyncio>=0.25",
     "httpx2>=2.12.0",
+    # Nur fuer die Browsertests unter tests/browser. Der Browser selbst
+    # kommt nicht ueber pip: "uv run playwright install chromium" laedt ihn
+    # einmalig herunter (siehe README).
+    "playwright>=1.55",
 ]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+
+# Die Browsertests brauchen zweierlei, was ein frischer Checkout nicht hat:
+# einen installierten Chromium und einen laufenden Uvicorn. Deshalb sind sie
+# markiert und werden standardmaessig NICHT AUSGEWAEHLT (deselected), nicht
+# uebersprungen (skipped). Der Unterschied ist Absicht:
+#
+#   - Ein Skip wuerde die Projektregel "0 uebersprungen" brechen, und der
+#     Naechste, der sie prueft, hielte das fuer einen Rueckschritt.
+#   - Ein harter Fehlschlag machte jeden frischen Checkout rot, bevor
+#     ueberhaupt jemand den Browser installiert hat.
+#
+# Ein gewoehnlicher "pytest"-Lauf zaehlt sie also als deselected. Wer sie
+# will, ruft sie ausdruecklich: "pytest -m browser" - das -m von der
+# Kommandozeile ueberschreibt das hier stehende. Die CI macht genau das,
+# nachdem sie Chromium installiert hat (.github/workflows/tests.yml).
+addopts = "-m 'not browser'"
+markers = [
+    "browser: Browsertest gegen einen echten Chromium (siehe tests/browser/)",
+]
 
 [build-system]
 requires = ["hatchling"]
