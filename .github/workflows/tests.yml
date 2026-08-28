@@ -1,9 +1,6 @@
 name: Tests
 
-# Bei jedem Push und jedem Pull Request. Der Anlass fuer diesen Workflow war
-# ein echter Befund: Auf einem frischen Checkout ohne .env brach das
-# Einsammeln der Tests ab, statt sauber zu ueberspringen - genau die Lage,
-# in der ein GitHub-Runner steckt. Die CI haelt das kuenftig fest.
+# Bei jedem Push und jedem Pull Request.
 on:
   push:
   pull_request:
@@ -23,130 +20,38 @@ jobs:
   tests:
     name: Testsuite
     runs-on: ubuntu-latest
-    # Grosszuegig: Die Container-Tests bauen das Image mit kaltem Docker-Cache
-    # (Debian-Pakete fuer PostgreSQL 17 inklusive). Die Zeitgrenze fuer den
-    # Build in tests/test_container.py liegt bei 900 Sekunden; das Jobtimeout
-    # muss deutlich darueber liegen, sonst faellt der Job ab, bevor der Test
-    # seinen eigenen Fehlschlag melden kann.
+    # Grosszuegig: Der erste Lauf baut das Testabbild mit kaltem Docker-Cache,
+    # und darin steckt ein vollstaendiger Chromium fuer die Browsertests.
     timeout-minutes: 45
-
-    # Wegwerfwerte fuer die Wegwerfdatenbank dieses Runners. Sie stehen
-    # absichtlich im Klartext: Sie gelten nur fuer diesen einen Lauf, die
-    # Datenbank wird danach mitsamt Volume weggeworfen, und es gibt nichts zu
-    # schuetzen. KEIN Geheimnis, nirgends sonst verwenden - die echten Werte
-    # fuer den Betrieb werden in Coolify gesetzt (siehe README).
-    # Die Namen sind dieselben wie in .env.example. Eine .env gibt es hier
-    # bewusst nicht; die Suite bekommt alles ueber die Umgebung, damit
-    # tatsaechlich alle Tests laufen und keiner uebersprungen wird.
-    # Das Passwort muss zu POSTGRES_PASSWORD in compose.dev.yml passen.
-    env:
-      POSTGRES_PASSWORD: entwicklung
-      DATABASE_URL: postgresql+psycopg://flashcards:entwicklung@localhost:55432/flashcards
-      TEST_DATABASE_URL: postgresql+psycopg://flashcards:entwicklung@localhost:55432/flashcards_test
-      APP_SECRET: ci-wegwerf-schluessel
-      TEACHER_PASSWORD: ci-wegwerf-passwort
-      BASE_URL: http://localhost:8000
 
     steps:
       - name: Repository auschecken
         uses: actions/checkout@v7.0.1
 
-      - name: uv einrichten
-        uses: astral-sh/setup-uv@v10.0.1
-        with:
-          # Dieselbe uv-Version wie auf dem Entwicklungsrechner, damit die CI
-          # nicht an einem Werkzeugsprung scheitert, den hier niemand gesehen
-          # hat. Python 3.13 holt sich uv selbst aus .python-version.
-          version: "0.8.22"
-          enable-cache: true
-
-      - name: Abhaengigkeiten installieren
-        # --frozen: uv.lock wird benutzt, nicht neu aufgeloest. Weicht die
-        # Sperrdatei von pyproject.toml ab, scheitert dieser Schritt - genau
-        # so soll es sein.
-        run: uv sync --frozen
-
-      - name: Datenbank starten
-        # Dieselbe compose.dev.yml, die auch lokal benutzt wird. Bewusst keine
-        # eigene compose.test.yml: Zwei Dateien, die dasselbe PostgreSQL
-        # beschreiben, driften auseinander, und dann ist gruen in der CI und
-        # rot auf dem Rechner - oder umgekehrt.
-        run: docker compose -f compose.dev.yml up -d
-
-      - name: Auf PostgreSQL warten
-        # Eine Schleife auf pg_isready, kein blindes sleep: Auf einem
-        # ausgelasteten Runner ist ein zu knapp geratenes Warten die haeufigste
-        # Ursache fuer sporadisch rote Laeufe. pg_isready wird im Container
-        # ausgefuehrt, damit der Workflow nicht davon abhaengt, ob auf dem
-        # Runner zufaellig ein PostgreSQL-Client installiert ist.
-        #
-        # WICHTIG, das "-h 127.0.0.1": Beim ersten Start legt das
-        # postgres-Image das Cluster mit initdb an und faehrt dafuer einen
-        # voruebergehenden Server hoch, der ausschliesslich auf dem
-        # Unix-Socket lauscht (listen_addresses=''). Ein pg_isready ohne -h
-        # geht ueber genau diesen Socket und meldet in dieser Phase bereits
-        # "accepting connections", obwohl ueber TCP noch nichts erreichbar
-        # ist - und ueber TCP laufen alle folgenden Schritte. Lokal
-        # nachgemessen: Es gibt ein Fenster, in dem die Socket-Pruefung 0 und
-        # die TCP-Pruefung 2 liefert, gefolgt vom Herunterfahren des
-        # voruebergehenden Servers. Wer hier den Socket prueft, geht zu frueh
-        # weiter und bekommt sporadisch ein "Connection refused" in der
-        # Migration.
+      # Der ganze Testlauf ist EIN Kommando. Auf dem Runner wird nichts
+      # eingerichtet: kein Python, kein uv, kein PostgreSQL, kein Chromium,
+      # kein createdb, keine .env. Das alles bringt compose.test.yml mit -
+      # und zwar in genau der Zusammenstellung, die spaeter auch im Betrieb
+      # laeuft (dasselbe Abbild, dasselbe PostgreSQL 17).
+      #
+      # --exit-code-from test: Der Rueckgabewert des Jobs ist der von pytest.
+      # Ein roter Lauf ist ein roter Container ist ein roter Job.
+      #
+      # --abort-on-container-exit: Sonst liefe der db-Dienst nach dem Ende
+      # der Suite weiter und der Schritt haenge bis zum Jobtimeout.
+      - name: Tests im Container
         run: |
-          for versuch in $(seq 1 60); do
-            if docker compose -f compose.dev.yml exec -T db \
-                 pg_isready -h 127.0.0.1 -p 5432 -U flashcards -d flashcards; then
-              echo "PostgreSQL ist nach Versuch ${versuch} bereit."
-              exit 0
-            fi
-            echo "Noch nicht bereit (Versuch ${versuch} von 60), warte 2 Sekunden ..."
-            sleep 2
-          done
-          echo "PostgreSQL wurde binnen 120 Sekunden nicht bereit. Logs:"
-          docker compose -f compose.dev.yml logs db
-          exit 1
+          docker compose -f compose.test.yml up \
+            --build \
+            --abort-on-container-exit \
+            --exit-code-from test
 
-      - name: Testdatenbank anlegen
-        # Die Suite legt die Tabellen selbst an, aber nicht die Datenbank.
-        # Ohne flashcards_test wuerden alle Datenbanktests uebersprungen -
-        # gruen, aber ohne Aussage.
-        run: docker compose -f compose.dev.yml exec -T db createdb -U flashcards flashcards_test
-
-      - name: Migrationen einspielen
-        run: uv run alembic upgrade head
-
-      - name: Migrationen gegen die Modelle pruefen
-        # Schlaegt an, sobald Modelle und Migrationen auseinanderlaufen - also
-        # sobald jemand ein Modell aendert und die Migration vergisst. Vorher
-        # wurde diese Deckungsgleichheit nur von Hand geprueft.
-        run: uv run alembic check
-
-      - name: Tests ausfuehren
-        # Erwartet wird eine vollstaendig gruene Suite ohne uebersprungene
-        # Tests: Alle Umgebungsvariablen sind gesetzt, und Docker steht auf dem
-        # Runner bereit, also laufen auch die Container-Tests.
-        run: uv run pytest -v
-
-      - name: Chromium fuer die Browsertests installieren
-        # --with-deps holt die Systembibliotheken mit, die Chromium auf
-        # einem nackten ubuntu-latest braucht. Ohne sie startet der
-        # Browser mit einem Fehler ueber eine fehlende .so-Datei, und das
-        # sieht nach einem kaputten Test aus statt nach einem fehlenden
-        # Paket.
-        run: uv run playwright install --with-deps chromium
-
-      - name: Browsertests ausfuehren
-        # Ausdruecklich "-m browser": Die Markierung ueberschreibt das
-        # "-m 'not browser'" aus pyproject.toml, mit dem der Schritt
-        # darueber sie nicht ausgewaehlt hat. Die Tests starten sich
-        # ihren eigenen Uvicorn auf einem freien Port und legen ihre
-        # Bundles in der Testdatenbank an (siehe tests/browser/conftest.py).
-        run: uv run pytest -m browser -v
-
-      - name: Datenbanklogs bei Fehlschlag
+      # Bei einem Fehlschlag sind die Logs des db-Dienstes das Erste, was
+      # jemand sehen will - der Schritt oben zeigt nur die Ausgabe von pytest.
+      - name: Logs bei Fehlschlag
         if: failure()
-        run: docker compose -f compose.dev.yml logs db
+        run: docker compose -f compose.test.yml logs
 
-      - name: Datenbank abraeumen
+      - name: Abraeumen
         if: always()
-        run: docker compose -f compose.dev.yml down -v
+        run: docker compose -f compose.test.yml down -v

@@ -2,149 +2,161 @@
 
 Lernseiten mit Karteikarten und Multiple-Choice-Fragen. Lernende erhalten
 von ihrer Lehrkraft einen Link zu einer Lernseite. Keine Anmeldung nötig,
-keine gespeicherten Ergebnisse. Die Lernseiten selbst werden noch nicht
-bereitgestellt – dieser Teil folgt in einem späteren Plan.
+keine gespeicherten Ergebnisse.
 
-Alles läuft in **einem** Container: PostgreSQL und Webserver, zusammengehalten
-von `supervisord`.
+Der Verbund besteht aus **zwei** Diensten, beschrieben in `compose.yml`:
+
+| Dienst | Was darin läuft |
+|---|---|
+| `app` | Lernseiten, MCP-Server und OAuth – ein einziger `uvicorn`. `/mcp` ist eine Route in `app/main.py`, kein eigener Prozess. |
+| `db` | PostgreSQL 17, das offizielle Abbild, unverändert |
 
 ## Das Wichtigste zuerst: das Volume
 
-Die Datenbank läuft im selben Container wie die Anwendung und liegt unter
-`/data/pgdata`. Es muss ein persistentes Volume auf **`/data`** gemountet sein
-– in Coolify unter *Persistent Storage*, lokal erledigt das `run-local.sh`.
+Die Lernpakete liegen im Volume **`pgdata`**, das an
+`/var/lib/postgresql/data` im Dienst `db` hängt. Wer dieses Volume sichert,
+hat alles; die Anwendung bringt deshalb keine eigene Backup-Funktion mit.
 
-Ohne dieses Volume startet der Container bewusst nicht, sondern bricht mit
-einer Klartextmeldung ab – lieber ein klarer Fehler als stillschweigend
-verlorene Lernseiten.
-
-Damit ist auch die Sicherung geklärt: Alles Sicherungswürdige liegt unter
-`/data`; wer dieses Volume sichert, hat alles. Die Anwendung selbst bringt
-deshalb keine Backup-Funktion mit.
-
-### Die Hintertür: `ALLOW_EPHEMERAL_DATA`
-
-`ALLOW_EPHEMERAL_DATA=1` schaltet genau diese Prüfung ab. Der Container startet
-dann auch ohne Volume und schreibt die Datenbank in seine eigene, flüchtige
-Schicht: **Beim nächsten Stoppen sind alle Lernseiten weg.**
-
-Die Variable ist ausschließlich zum kurzen Ausprobieren gedacht – etwa
-`docker run` ohne Volume, nur um zu sehen, ob das Image überhaupt hochkommt.
-**Im Betrieb hat sie nichts zu suchen.** Wer sie einmal in Coolify setzt und
-dort stehen lässt, verliert die wichtigste Schutzprüfung dieses Projekts
-dauerhaft und unsichtbar: Der Container startet weiterhin, meldet sich gesund,
-und der Datenverlust fällt erst beim nächsten Deployment auf. Ein einzeiliges
-`WARNUNG:` im Log ist alles, was dann noch daran erinnert.
-
-## Den Container lokal betreiben
+Zwei Befehle, die man auseinanderhalten muss:
 
 ```bash
-./run-local.sh
+docker compose down        # beendet den Verbund, das Volume bleibt
+docker compose down -v     # beendet ihn UND wirft alle Lernpakete weg
 ```
 
-Das Skript baut das Image, legt `./daten` als Volume an und startet den
-Container auf `http://localhost:8000`. Der erste Start dauert länger, weil das
-Datenbank-Cluster angelegt wird. Prüfen:
+In Coolify muss für dieses Volume ein persistenter Speicher eingerichtet
+sein, sonst sind die Lernpakete nach dem nächsten Deployment fort.
+
+## Lokal betreiben
+
+```bash
+cp .env.example .env       # Werte eintragen, siehe Kommentare darin
+docker compose up -d --build
+```
+
+Der Verbund läuft dann auf `http://localhost:8000`. Der Dienst `app` wartet
+selbst darauf, dass die Datenbank Verbindungen annimmt, spielt die
+Migrationen ein und startet erst dann den Webserver. Prüfen:
 
 ```bash
 curl -s http://localhost:8000/healthz
 # {"status":"ok","datenbank":"ok"}
 ```
 
-Logs mitlesen mit `docker logs -f flashcards-lokal`, stoppen mit
-`docker stop -t 45 flashcards-lokal && docker rm flashcards-lokal`. Das
-Verzeichnis `./daten` bleibt liegen – beim nächsten Start ist alles wieder da.
+Logs mitlesen mit `docker compose logs -f`, beenden mit
+`docker compose down`. Beim nächsten Start ist alles wieder da.
 
-Die Frist von 45 Sekunden gibt PostgreSQL Zeit, mit einem Abschluss-Checkpoint
-herunterzufahren (siehe `stopwaitsecs` in `docker/supervisord.conf`). Ein harter
-Stopp – `docker rm -f`, ein überschrittenes Zeitlimit beim Deployment, ein
-Stromausfall – ist trotzdem verkraftbar: PostgreSQL lässt dann seine Sperrdatei
-`postmaster.pid` im Datenverzeichnis liegen, und `docker/entrypoint.sh` entfernt
-diese beim nächsten Start und schreibt eine Meldung darüber ins Log. Ohne das
-hält PostgreSQL die vermerkte Prozessnummer für einen zweiten laufenden Server
-– im frischen Container ist sie oft wieder vergeben – und verweigert den Start.
+Die Werte in der `.env` sind auf einem Entwicklungsrechner
+Entwicklungspasswörter; `APP_BIND=127.0.0.1` sorgt dafür, dass der Container
+nur vom Rechner selbst erreichbar ist. Für den Betrieb werden die Werte in
+Coolify gesetzt und tauchen nirgends im Git auf.
 
-Die Passwörter in `run-local.sh` sind Entwicklungspasswörter und stehen
-absichtlich im Klartext. Für den Betrieb werden die Werte in Coolify gesetzt.
+## Tests
+
+Die Suite läuft **im Container**, gegen genau den Stapel, der später auch im
+Betrieb läuft: dasselbe Abbild (`Dockerfile`, Stufe `test` baut auf `betrieb`
+auf), dasselbe PostgreSQL 17.
+
+```bash
+docker compose -f compose.test.yml up --build \
+    --abort-on-container-exit --exit-code-from test
+```
+
+Auf dem Rechner wird dafür nichts gebraucht und nichts angefasst: kein
+Python, kein `uv`, kein PostgreSQL, kein Chromium, keine `.env`. Der
+Container bringt alles mit, prüft sich selbst und beendet sich mit dem
+Rückgabewert von pytest.
+
+Der Reihe nach passiert darin (`docker/test-start.sh`): auf die Datenbank
+warten, `flashcards_test` anlegen, `alembic upgrade head`, `alembic check` –
+das schlägt an, sobald Modelle und Migrationen auseinanderlaufen –, dann
+`pytest`, und zuletzt `pytest -m browser` für die Browsertests gegen einen
+echten Chromium.
+
+Nur eine Auswahl, ohne den ganzen Durchlauf:
+
+```bash
+docker compose -f compose.test.yml run --rm test -k oauth -x
+docker compose -f compose.test.yml run --rm test -m browser
+```
 
 ## Entwicklung
 
-Für die Arbeit am Code läuft die Datenbank außerhalb des Containers, über
-`compose.dev.yml` auf Port 55432:
+Für die Arbeit am Code mit automatischem Neuladen genügt die Datenbank aus
+dem Verbund. Sie ist über `DB_PORT` (Vorgabe: 55432) vom Rechner aus
+erreichbar:
 
 ```bash
 uv sync
-docker compose -f compose.dev.yml up -d
-cp .env.example .env          # DATABASE_URL auf Port 55432 umstellen
-set -a; . ./.env; set +a
+docker compose up -d db                      # nur die Datenbank
+export DATABASE_URL='postgresql+psycopg://flashcards:DEIN-PASSWORT@localhost:55432/flashcards'
 uv run alembic upgrade head
 uv run uvicorn app.main:app --reload
 ```
 
-`TEST_DATABASE_URL` steht in `.env.example` bereits auf den Werten von
-`compose.dev.yml` (Port 55432, Passwort `entwicklung`) und muss nicht
-angefasst werden. Anzupassen ist nur `DATABASE_URL`: Der Beispielwert dort
-beschreibt den Betrieb – Datenbank im selben Container, Port 5432 –, für die
-Entwicklung zeigt sie auf `localhost:55432` mit dem Passwort `entwicklung`.
+`DATABASE_URL` wird hier ausdrücklich überschrieben und **nicht** in der
+`.env` geändert: Der Wert dort gehört dem Verbund und zeigt auf `db:5432`,
+den Dienstnamen im gemeinsamen Docker-Netz. Ein Rechner kennt diesen Namen
+nicht – deshalb hier `localhost:55432`. Zwei Bedeutungen für dieselbe
+Variable in einer Datei zu führen, hat dieses Projekt schon einmal in einen
+unbrauchbaren Zustand gebracht.
 
 **Ältere lokale Datenbank vorhanden?** Migrationen wurden zwischenzeitlich
 fortlaufend nummeriert (`0001` statt eines Hash-Namens). Steht in einer
-bestehenden lokalen Datenbank noch `alembic_version = 'ccc906f048c0'`, meldet
+bestehenden Datenbank noch `alembic_version = 'ccc906f048c0'`, meldet
 `alembic upgrade head` „Can't locate revision identified by
 'ccc906f048c0'“. Es gibt dafür keine Migration – die Datenbank muss einmalig
 neu angelegt werden:
 
 ```bash
-docker compose -f compose.dev.yml down -v   # wirft auch die Testdatenbank weg
-docker compose -f compose.dev.yml up -d
-uv run alembic upgrade head
+docker compose down -v     # wirft die Datenbank weg
+docker compose up -d
 ```
-
-Tests (die Testdatenbank wird einmalig angelegt):
-
-```bash
-docker compose -f compose.dev.yml exec db createdb -U flashcards flashcards_test
-set -a; . ./.env; set +a
-uv run pytest
-```
-
-Die Container-Tests bauen das Image und brauchen ein laufendes Docker. Ohne
-Docker werden sie übersprungen.
 
 ## Tests in GitHub Actions
 
-Bei jedem Push und jedem Pull Request läuft `.github/workflows/tests.yml`:
-Datenbank aus derselben `compose.dev.yml` hochfahren, warten bis PostgreSQL
-über TCP antwortet, Testdatenbank anlegen, `alembic upgrade head`, dann
-`alembic check` – das schlägt an, sobald Modelle und Migrationen
-auseinanderlaufen – und zuletzt `uv run pytest -v`.
+Bei jedem Push und jedem Pull Request läuft `.github/workflows/tests.yml`.
+Der Workflow besteht aus genau einem inhaltlichen Schritt – demselben
+Compose-Aufruf wie oben. Auf dem Runner wird nichts eingerichtet: Was die
+Tests brauchen, bringt `compose.test.yml` mit.
 
-Auf dem Runner gibt es keine `.env`. Die Umgebungsvariablen stehen im
-Workflow, damit die **vollständige** Suite läuft und nichts übersprungen wird.
-Es sind erkennbare Wegwerfwerte für die Wegwerfdatenbank des Runners und
-absichtlich im Klartext – keine Geheimnisse. Die echten Werte für den Betrieb
+`--exit-code-from test` macht den Rückgabewert von pytest zum Rückgabewert
+des Jobs: Ein roter Lauf ist ein roter Container ist ein roter Job.
+
+Die Wegwerfwerte für den Testlauf stehen im Klartext in `compose.test.yml`.
+Sie gelten nur für den jeweiligen Lauf, die Datenbank wird danach mitsamt
+Cluster weggeworfen – keine Geheimnisse. Die echten Werte für den Betrieb
 werden in Coolify gesetzt.
 
-Die Container-Tests bauen das Image mit kaltem Cache; der Lauf dauert deshalb
-einige Minuten. Ob er durchgelaufen ist, steht unter *Actions* im Repository
-sowie als Häkchen neben dem Commit und bei den Checks eines Pull Requests.
+Der erste Lauf baut das Testabbild mit kaltem Cache und lädt dabei einen
+vollständigen Chromium; das dauert einige Minuten. Ob er durchgelaufen ist,
+steht unter *Actions* im Repository sowie als Häkchen neben dem Commit.
 
 ## Betrieb auf Coolify
 
 Coolify zieht sich das Repository selbst per CI/CD. Einzurichten ist dort:
 
-1. Neue Anwendung aus diesem Git-Repository, Build über das `Dockerfile`
-2. **Persistent Storage: Volume auf `/data`** – ohne das startet der Container nicht
-3. Umgebungsvariablen aus `.env.example` setzen; `DATABASE_URL` zeigt auf
-   `localhost:5432` **im** Container, das Passwort darin muss zu
-   `POSTGRES_PASSWORD` passen, `BASE_URL` auf die echte Domain
-4. Domain zuweisen, HTTPS aktivieren
+1. Neue Anwendung aus diesem Git-Repository, **Build über `compose.yml`**
+   (Docker Compose, nicht das nackte `Dockerfile` – die Anwendung allein
+   hat keine Datenbank)
+2. **Persistentes Volume für `pgdata`** – ohne das sind die Lernpakete beim
+   nächsten Deployment fort
+3. Umgebungsvariablen aus `.env.example` setzen. `DATABASE_URL` zeigt auf
+   `db:5432`; Benutzer, Passwort und Datenbankname darin müssen zu
+   `POSTGRES_USER`, `POSTGRES_PASSWORD` und `POSTGRES_DB` passen, `BASE_URL`
+   auf die echte Domain
+4. Domain auf den Dienst `app` zuweisen, HTTPS aktivieren
 5. Healthcheck auf `/healthz`
-6. **Stop-Grace-Period großzügig setzen** (mindestens 60 Sekunden). PostgreSQL
-   bekommt beim Herunterfahren bewusst Zeit für einen sauberen Checkpoint
-   (`stopwaitsecs=30` in `docker/supervisord.conf`). Ist die Grace-Period zu
-   knapp, wird es abgeschossen und fährt beim nächsten Start per
-   Crash-Recovery hoch – langsamer und ohne Not riskant.
+
+Zum Passwort: Das Abbild `postgres` legt die Rolle nur beim **Erststart** an.
+Ein später geändertes `POSTGRES_PASSWORD` lässt eine bestehende Rolle
+unberührt – die Anwendung käme dann nicht mehr an ihre Datenbank. Wer das
+Passwort wechselt, muss es zusätzlich in der Datenbank selbst ändern:
+
+```bash
+docker compose exec db psql -U flashcards -c \
+    "alter role flashcards password 'neues-passwort'"
+```
 
 ## Inhalte pflegen
 
@@ -163,11 +175,14 @@ Wie du den Server mit Claude Cowork verbindest, steht in
 
 ## Aufbau
 
-| Verzeichnis | Inhalt |
+| Datei / Verzeichnis | Inhalt |
 |---|---|
+| `compose.yml` | Der Betriebsverbund: `app` und `db` |
+| `compose.test.yml` | Der Testlauf: `test` und `db`, beides flüchtig |
+| `Dockerfile` | Zwei Stufen: `betrieb` und darauf aufbauend `test` |
+| `docker/` | Die beiden Startskripte |
 | `app/` | Anwendung |
 | `migrations/` | Alembic |
-| `docker/` | Startskripte und Prozessverwaltung |
 | `tests/` | Testsuite |
 | `docs/superpowers/specs/` | Design-Spec |
 | `docs/design/mockups/` | Freigegebene Entwürfe – Referenz für die Optik |

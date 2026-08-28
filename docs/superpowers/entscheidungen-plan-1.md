@@ -43,6 +43,9 @@ Stand: 2026-08-27, 34 Entscheidungen.
 
 ### 16. Nutzerwunsch waehrend der Ausfuehrung — Tests sollen spaeter in GitHub Actions laufen. Entscheidung: KEINE separate compose.test.yaml, sondern dieselbe compose.dev.yml in CI hochfahren. Grund: Zwei Compose-Dateien, die dasselbe Postgres beschreiben, driften auseinander und erzeugen "gruen in CI, rot lokal". Wird als Task 9 in Plan 1 aufgenommen und nach Task 8 ausgeschrieben. Kosten falls falsch: gering, eine Workflow-Datei.
 
+
+**Nachtraeglich zurueckgenommen.** Diese Entscheidung gilt nicht mehr: Es gibt compose.yml (Betrieb) und compose.test.yml (Tests), und sie beschreiben NICHT dasselbe Postgres - das befuerchtete Auseinanderdriften kann es deshalb nicht geben. Die Testdatenbank ist fluechtig und ohne Volume, die Betriebsdatenbank liegt im Volume pgdata. Massgeblich ist der README.
+
 ### 17. Hintergrund-Sicherheitspruefung hat pyproject.toml als Lieferketten-Risiko markiert (httpx2). Geprueft und abgehakt: Repository pydantic/httpx2 existiert unter der Pydantic-Organisation (1000 Sterne, 2263 Commits, aktiv), PyPI weist Pydantic Services Inc. als Herausgeber aus, erklaerte Fortfuehrung von httpx. Zusaetzlich entscheidend: httpx2 ist reine Dev-Abhaengigkeit und wird vom geplanten Dockerfile per `uv sync --frozen --no-dev` nie ins Produktionsimage installiert. Kosten falls falsch: begrenzt auf die Entwicklungsumgebung, nicht auf den ausgelieferten Container.
 
 ### 18. Alle drei Wichtig-Befunde werden behoben, und die Migration 0001 wird dabei **an Ort und Stelle geaendert** statt eine 0002 nachzuschieben. Grund: Nichts ist deployt, es gibt keine Datenbank im Feld, deren Zustand zu bewahren waere. Eine zweite Migration wuerde die Historie mit einem Fehler und seiner Korrektur belasten, den nie jemand gesehen hat. Kosten falls falsch: keine, solange vor dem ersten Deployment korrigiert wird — danach waere es unzulaessig.

@@ -1,18 +1,22 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Der Start der Anwendung: auf die Datenbank warten, Migrationen einspielen,
+# uvicorn starten. Das ist alles, was in diesem Container passiert - einen
+# Prozessverwalter gibt es nicht mehr, und einen Datenbankserver auch nicht
+# (siehe compose.yml, Dienst "db").
+#
 # Gewartet wird auf die Bedingung, die wirklich zaehlt: eine echte Verbindung
 # mit den Zugangsdaten der Anwendung (DATABASE_URL). Das deckt alles ab, was
-# vorher einzeln geprueft wurde - Server oben, Rolle da, Datenbank da,
+# man sonst einzeln pruefen muesste - Server oben, Rolle da, Datenbank da,
 # Passwort passend - und haengt an keinem Hilfszustand ausserhalb der
 # Datenbank.
 #
-# Damit faellt auch auf, wenn db-init.sh scheitert: Frueher war das eine
-# reine Logzeile ohne Wirkung, die App lief mit dem alten Passwort weiter und
-# der Passwortabgleich war still ausgefallen. Und es fangt den Fall ab, dass
-# supervisord die App zwar nach db-init startet (priority), aber nicht auf
-# deren Ende wartet - bei einer Passwortrotation kann Alembic sonst mit dem
-# neuen Passwort verbinden wollen, bevor ALTER ROLE durch ist.
+# Das ist kein doppelter Boden zu "depends_on: service_healthy" in
+# compose.yml, sondern deckt einen anderen Fall ab: depends_on gilt nur beim
+# Start des Verbunds. Wird der db-Dienst spaeter neu gestartet - ein
+# Deployment, ein Neustart des Hosts -, faehrt diese Wartezeit die Anwendung
+# wieder sauber hoch, statt sie in einer Neustartschleife scheitern zu lassen.
 echo "Warte auf die Datenbank (Verbindung mit den Zugangsdaten der Anwendung) ..."
 python - <<'PY'
 import sys
@@ -65,10 +69,8 @@ print(
 )
 print("", file=sys.stderr)
 print("Wahrscheinliche Gruende:", file=sys.stderr)
-print("  - PostgreSQL im Container ist nicht hochgekommen", file=sys.stderr)
 print(
-    "  - Rolle oder Datenbank 'flashcards' fehlen (db-init.sh ist nicht "
-    "durchgelaufen - siehe dessen Meldungen weiter oben im Log)",
+    "  - der Dienst 'db' ist nicht hochgekommen (docker compose logs db)",
     file=sys.stderr,
 )
 print(
@@ -76,8 +78,13 @@ print(
     file=sys.stderr,
 )
 print(
-    "  - Host oder Port in DATABASE_URL zeigen nicht auf die Datenbank im "
-    "Container (erwartet wird localhost:5432)",
+    "  - Host oder Port in DATABASE_URL zeigen nicht auf den db-Dienst "
+    "(erwartet wird db:5432, nicht localhost)",
+    file=sys.stderr,
+)
+print(
+    "  - Benutzer oder Datenbankname in DATABASE_URL weichen von "
+    "POSTGRES_USER/POSTGRES_DB ab; das postgres-Abbild legt genau die an",
     file=sys.stderr,
 )
 print(

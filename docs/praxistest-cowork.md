@@ -56,20 +56,25 @@ Ordnung.
 
 In einem zweiten Fenster, `TUNNEL` durch die tatsächliche Adresse ersetzen:
 
+Beide Werte gehören in die `.env`, denn die Anwendung baut sämtliche
+OAuth-URLs aus `BASE_URL` und muss ihre öffentliche Adresse deshalb schon
+beim Start kennen:
+
 ```bash
-BASE_URL=https://TUNNEL.trycloudflare.com \
-TEACHER_PASSWORD=ein-eigenes-passwort \
-./run-local.sh
+# in der .env eintragen:
+#   BASE_URL=https://TUNNEL.trycloudflare.com
+#   TEACHER_PASSWORD=ein-eigenes-passwort
+
+docker compose up -d --build
 ```
 
-Beide Werte überschreiben die Vorgaben des Skripts, das sonst
-`http://localhost:8000` und das Entwicklungspasswort setzt. Den alten
-Container beendet das Skript selbst.
+Die laufende Anwendung liest die `.env` nicht neu – nach einer Änderung
+daran braucht es das `docker compose up -d` oben, damit sie ankommt.
 
 **Setz das Passwort wirklich.** Solange der Tunnel läuft, ist dieser
 Container öffentlich erreichbar, und `TEACHER_PASSWORD` ist das Einzige, was
-zwischen dem Netz und deinen Lernseiten steht. Das Entwicklungspasswort aus
-`run-local.sh` steht im Repository.
+zwischen dem Netz und deinen Lernseiten steht. Ein Entwicklungspasswort, das
+irgendwo im Repository steht, taugt dafür nicht.
 
 Die Tunneladresse gehört **ohne** Schrägstrich am Ende eingetragen.
 

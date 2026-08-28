@@ -1,0 +1,74 @@
+# Das TESTSYSTEM: derselbe Aufbau wie im Betrieb, nur als Testlauf.
+#
+#     test  =  dasselbe Abbild wie im Betrieb, zusaetzlich mit pytest und
+#              Chromium (Dockerfile, Stufe "test")
+#     db    =  dasselbe PostgreSQL 17 wie im Betrieb, nur fluechtig
+#
+# Der Container faehrt hoch, laesst die Suite laufen und beendet sich mit
+# ihrem Rueckgabewert. Ein roter Lauf ist ein roter Container - genau das
+# braucht die CI, und mehr braucht sie nicht: kein PostgreSQL auf dem Runner,
+# kein uv, kein createdb von Hand.
+#
+#     # so ruft die CI es auf:
+#     docker compose -f compose.test.yml up --build \
+#         --abort-on-container-exit --exit-code-from test
+#
+#     # einzelne Tests auf dem eigenen Rechner:
+#     docker compose -f compose.test.yml run --rm test -k oauth -x
+#
+# Auf dem Rechner wird dafuer nichts gebraucht und nichts angefasst: kein
+# PostgreSQL, kein Chromium, keine .env. Die Testdaten liegen im Container
+# und sind mit ihm wieder fort - die Lernpakete des Betriebssystems im
+# Volume "pgdata" bleiben unberuehrt, denn das hier ist ein eigenes Projekt
+# (name:) mit einem eigenen Netz und einer eigenen Datenbank.
+
+name: flashcards-test
+
+services:
+  test:
+    build:
+      context: .
+      target: test
+    image: flashcards-test
+
+    depends_on:
+      db:
+        condition: service_healthy
+
+    # Wegwerfwerte, absichtlich hier und nicht in einer .env: Sie gelten nur
+    # fuer diesen einen Lauf, es gibt daran nichts zu schuetzen, und in der
+    # CI soll niemand erst eine Datei anlegen muessen. Das Gegenstueck ist
+    # compose.yml - dort steht kein einziger Wert, weil es dort um echte
+    # Geheimnisse geht.
+    environment:
+      # Die Anwendungsdatenbank. Die Suite fasst sie kaum an, aber
+      # app/config.py verlangt DATABASE_URL, und tests/test_migrations.py
+      # spielt die Migrationen dagegen ein.
+      DATABASE_URL: postgresql+psycopg://flashcards:test-nur-fuer-diesen-lauf@db:5432/flashcards
+      # Die Testdatenbank. Eigene Datenbank im selben Cluster: Die Suite legt
+      # ihr Schema darin bei jedem Lauf neu an (drop_all/create_all in
+      # tests/conftest.py) und darf dabei der Anwendungsdatenbank nicht in
+      # die Quere kommen. Angelegt wird sie von docker/test-start.sh.
+      TEST_DATABASE_URL: postgresql+psycopg://flashcards:test-nur-fuer-diesen-lauf@db:5432/flashcards_test
+      APP_SECRET: test-schluessel-nur-fuer-die-suite
+      TEACHER_PASSWORD: test-passwort-nur-fuer-die-suite
+      BASE_URL: http://localhost:8000
+
+    # Keine Ports nach aussen: Dieser Container wird von niemandem
+    # angesprochen. Er prueft sich selbst und geht wieder.
+
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: flashcards
+      POSTGRES_PASSWORD: test-nur-fuer-diesen-lauf
+      POSTGRES_DB: flashcards
+    # Kein Volume: Jeder Lauf beginnt mit einem frischen Cluster, und nach
+    # "docker compose -f compose.test.yml down" ist nichts uebrig.
+    healthcheck:
+      # Zum "-h 127.0.0.1" siehe die ausfuehrliche Begruendung in compose.yml.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U flashcards -d flashcards"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 15s

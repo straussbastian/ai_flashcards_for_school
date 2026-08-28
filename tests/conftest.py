@@ -28,9 +28,10 @@ async def test_engine():
     test_database_url = os.environ.get("TEST_DATABASE_URL")
     if not test_database_url:
         pytest.skip(
-            "TEST_DATABASE_URL ist nicht gesetzt. Bitte in der .env eintragen "
-            "(siehe .env.example) und die Testdatenbank einmalig anlegen mit: "
-            "docker compose -f compose.dev.yml exec db createdb -U flashcards flashcards_test"
+            "TEST_DATABASE_URL ist nicht gesetzt. Die Suite laeuft im Container, "
+            "der Datenbank und Variablen selbst mitbringt: "
+            "docker compose -f compose.test.yml up --build "
+            "--abort-on-container-exit --exit-code-from test"
         )
 
     engine = create_async_engine(test_database_url)

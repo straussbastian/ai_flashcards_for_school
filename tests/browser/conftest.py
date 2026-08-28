@@ -15,12 +15,16 @@ gewoehnlicher "pytest"-Lauf waehlt sie deshalb nicht aus. Sie sind damit
 "deselected", nicht "skipped" - die Projektregel "0 uebersprungen" bleibt
 woertlich erfuellt, und ein frischer Checkout bleibt gruen.
 
-Ausfuehren:
+Ausfuehren: gar nicht von Hand. Das Testabbild bringt den Chromium mit
+(Dockerfile, Stufe "test"), und docker/test-start.sh ruft nach dem
+gewoehnlichen Durchgang ausdruecklich "pytest -m browser" auf:
 
-    docker compose -f compose.dev.yml up -d
-    set -a; . ./.env; set +a
-    uv run playwright install chromium     # einmalig
-    uv run pytest -m browser
+    docker compose -f compose.test.yml up --build \
+        --abort-on-container-exit --exit-code-from test
+
+Nur diese eine Auswahl, ohne den ersten Durchgang:
+
+    docker compose -f compose.test.yml run --rm test -m browser
 """
 
 import os
@@ -74,8 +78,8 @@ def pytest_collection_modifyitems(config, items):
 def _freier_port() -> int:
     """Einen freien Port vom Betriebssystem erfragen.
 
-    Ausdruecklich nicht 8000: Dort laeuft der lokale Container
-    (run-local.sh). Ein fester Port haette die Tests gegen dessen
+    Ausdruecklich nicht 8000: Dort laeuft der Betriebscontainer
+    (compose.yml). Ein fester Port haette die Tests gegen dessen
     Datenbank laufen lassen, nicht gegen die Testdatenbank - gruen
     vielleicht, aber ueber etwas ganz anderem.
     """
@@ -125,9 +129,9 @@ def datenbank_url() -> str:
     url = os.environ.get("TEST_DATABASE_URL")
     if not url:
         pytest.fail(
-            "TEST_DATABASE_URL ist nicht gesetzt. Fuer die Browsertests:\n"
-            "  docker compose -f compose.dev.yml up -d\n"
-            "  set -a; . ./.env; set +a"
+            "TEST_DATABASE_URL ist nicht gesetzt. Die Browsertests laufen im "
+            "Testcontainer, der die Variable selbst mitbringt:\n"
+            "  docker compose -f compose.test.yml run --rm test -m browser"
         )
     return url
 

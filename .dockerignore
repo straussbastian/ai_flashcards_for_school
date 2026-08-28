@@ -3,14 +3,16 @@
 .env
 .env.*
 .superpowers
-# run-local.sh legt ./daten als Volume an; darin liegt danach das
-# PostgreSQL-Cluster mit Modus 700. Ohne diese Zeile wanderte beim zweiten
-# Lauf das komplette Cluster in den Build-Kontext - auf einem Linux-Host
-# scheitert das an den Rechten. .gitignore kennt daten/ bereits.
-daten
 docs
-tests
-compose.dev.yml
+daten
+# Die Compose-Dateien gehoeren nicht ins Abbild - sie beschreiben, wie es
+# gestartet wird, nicht was darin liegt.
+compose.yml
+compose.test.yml
+# tests/ steht bewusst NICHT hier: Die Teststufe des Dockerfiles
+# (target: test, siehe compose.test.yml) kopiert das Verzeichnis. Ins
+# Betriebsabbild geraet es trotzdem nicht - die Stufe "betrieb" kopiert nur
+# app, migrations, alembic.ini und docker.
 **/__pycache__
 **/*.pyc
 .pytest_cache

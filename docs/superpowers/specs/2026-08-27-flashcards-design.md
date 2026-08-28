@@ -10,7 +10,7 @@ Eine öffentlich erreichbare Lernseite, auf der Schülerinnen und Schüler einer
 
 Gepflegt werden die Inhalte ausschließlich über einen MCP-Server. Die Lehrerin arbeitet mit Claude Cowork, lässt ihren Agenten aus einem Arbeitsblatt ein Bundle bauen und bekommt den fertigen Link zurück. Es gibt bewusst **kein Administrationsoberfläche**.
 
-Betrieb: ein Docker-Container auf einem Coolify-Server.
+Betrieb: ein Docker-Compose-Verbund aus zwei Diensten (`app` und `db`) auf einem Coolify-Server.
 
 ### Nutzer
 
@@ -30,7 +30,7 @@ Betrieb: ein Docker-Container auf einem Coolify-Server.
 | Thema | Entscheidung |
 |---|---|
 | Stack | Python 3.13, FastAPI, ein Prozess für Web, MCP und OAuth |
-| Container | Alles in einem Container: Postgres und App unter `supervisord` |
+| Container | Zwei Dienste in `compose.yml`: `app` (Web, MCP, OAuth) und `db` (offizielles `postgres:17`) |
 | Ergebnisse | Nur im Browser, nichts wird gespeichert |
 | Flashcard-Bewertung | Flag pro Bundle (`selbsteinschaetzung`) |
 | Drei-Wort-URL | Server würfelt aus gepflegten deutschen Wortlisten |
@@ -46,23 +46,30 @@ Betrieb: ein Docker-Container auf einem Coolify-Server.
 
 ## 3. Architektur und Betrieb
 
-### Ein Container, zwei Prozesse
+### Zwei Dienste, ein Prozess je Dienst
 
-Basis ist Debian mit Python 3.13 und PostgreSQL 17. `supervisord` verwaltet beide Prozesse und startet einen abgestürzten Dienst neu.
+`compose.yml` beschreibt den Verbund:
 
-Startreihenfolge: Postgres hochfahren → auf Bereitschaft warten → Alembic-Migrationen → Uvicorn.
+| Dienst | Inhalt |
+|---|---|
+| `app` | Python 3.13 auf Debian, ein einziger `uvicorn` für Web, MCP und OAuth. `/mcp` ist eine Route in `app/main.py`, kein eigener Prozess. |
+| `db` | `postgres:17`, das offizielle Abbild, unverändert |
+
+Startreihenfolge: `depends_on: service_healthy` hält `app` zurück, bis `pg_isready` durchgeht; danach wartet `docker/app-start.sh` zusätzlich auf eine echte Verbindung mit den Zugangsdaten der Anwendung, spielt die Alembic-Migrationen ein und startet Uvicorn.
+
+**Korrektur gegenüber der ersten Fassung dieser Spec.** Hier stand ursprünglich „Ein Container, zwei Prozesse“: PostgreSQL und Anwendung gemeinsam in einem Abbild, verwaltet von `supervisord`, mit `PGDATA` auf einem `/data`-Volume. Das war von Anfang an falsch und ist umgesetzt worden, bevor es auffiel. Damit sind entfallen: `docker/supervisord.conf`, `docker/entrypoint.sh` (Volume-Prüfung, `initdb`, Aufräumen verwaister `postmaster.pid`), `docker/db-init.sh` (Rollen- und Datenbankanlage) sowie die Variable `ALLOW_EPHEMERAL_DATA`. Das offizielle `postgres`-Abbild erledigt all das von sich aus.
 
 ### Persistenz
 
-`PGDATA` liegt auf `/data/pgdata`. `/data` **muss** in Coolify als persistentes Volume gemountet sein.
+Die Daten liegen im benannten Volume `pgdata`, gemountet auf `/var/lib/postgresql/data` im Dienst `db`. In Coolify muss dafür ein persistenter Speicher eingerichtet sein.
 
-Der Container prüft das beim Start: Ist `/data` kein Mountpoint, bricht er mit einer Klartextmeldung ab, statt still eine leere Datenbank anzulegen. Das ist die kritische Stelle der Ein-Container-Variante und gehört an den Anfang der README.
+Es gibt keine Startprüfung mehr, die einen fehlenden Mount abfängt: Ein benanntes Volume legt Docker selbst an, wenn es fehlt. Der Unterschied zwischen `docker compose down` und `docker compose down -v` ist damit die kritische Stelle und gehört an den Anfang der README.
 
 ### Backups
 
 **Nicht Teil dieser Anwendung.** Sicherungen übernimmt Coolify auf Ebene des Volumes. Im Container läuft dafür kein eigener Prozess und liegt kein eigenes Skript — die Anwendung kümmert sich um Lernkarten, nicht um Betriebsführung.
 
-Zu wissen ist nur: Alles, was gesichert werden muss, liegt unter `/data`. Wer das Volume sichert, hat alles.
+Zu wissen ist nur: Alles, was gesichert werden muss, liegt im Volume `pgdata`. Wer das Volume sichert, hat alles.
 
 ### Routen
 
@@ -85,8 +92,8 @@ Alles über `.env`, im Repo liegt `.env.example`. Keine Geheimnisse im Image, ke
 
 | Variable | Bedeutung |
 |---|---|
-| `POSTGRES_PASSWORD` | Passwort der lokalen Datenbank |
-| `DATABASE_URL` | Verbindung, zeigt auf localhost im selben Container |
+| `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | Rolle, Passwort und Datenbank; das `postgres`-Abbild legt sie beim Erststart daraus an |
+| `DATABASE_URL` | Verbindung, zeigt auf `db:5432` – den Dienstnamen im gemeinsamen Docker-Netz |
 | `APP_SECRET` | Signaturschlüssel für OAuth-Tokens |
 | `TEACHER_PASSWORD` | Das eine Passwort für die OAuth-Zustimmungsseite |
 | `BASE_URL` | Öffentliche Basis-URL, z. B. `https://karten.example.de` – wird für erzeugte Links und OAuth-Metadaten gebraucht |
@@ -345,7 +352,7 @@ Lange Fragen scrollen innerhalb der Karte, die Seite selbst scrollt nie waagerec
 
 ### Zuerst lokal
 
-Entwickelt und abgenommen wird auf dem eigenen Rechner: Image bauen, Container mit einem lokalen Verzeichnis als `/data`-Volume starten, gegen `http://localhost:8000` prüfen. Erst wenn das trägt, kommt der Server dazu.
+Entwickelt und abgenommen wird auf dem eigenen Rechner: `docker compose up -d --build`, gegen `http://localhost:8000` prüfen. Erst wenn das trägt, kommt der Server dazu.
 
 Weil Cowork MCP-Server aus Anthropics Cloud erreicht und nicht vom Rechner der Lehrkraft, ist ein lokaler Container von dort nicht erreichbar. Der OAuth-Ablauf wird deshalb lokal über Tests geprüft; für einen Praxistest mit echtem Cowork braucht es einen Tunnel (`cloudflared`) oder das Server-Deployment.
 
@@ -354,7 +361,7 @@ Weil Cowork MCP-Server aus Anthropics Cloud erreicht und nicht vom Rechner der L
 Coolify zieht sich das Repository eigenständig per CI/CD. Einzurichten ist dort:
 
 1. Anwendung aus dem Git-Repo anlegen, Dockerfile-Build
-2. **Persistentes Volume auf `/data`** – ohne das startet der Container bewusst nicht
+2. **Persistentes Volume für `pgdata`** – ohne das sind die Lernpakete beim nächsten Deployment fort
 3. Umgebungsvariablen aus `.env.example` setzen, `BASE_URL` auf die echte Domain
 4. Domain zuweisen, HTTPS über Coolify
 5. Healthcheck auf `/healthz`
@@ -364,8 +371,8 @@ Coolify zieht sich das Repository eigenständig per CI/CD. Einzurichten ist dort
 
 **OAuth ist der fehleranfälligste Teil.** Discovery, exakte `resource`-Übereinstimmung und PKCE müssen stimmen, sonst meldet Claude nur „Couldn't reach the MCP server". Deshalb wird OAuth als eigenes Implementierungspaket gebaut und vollständig getestet, bevor die Werkzeuge dazukommen.
 
-**Der Volume-Mount** ist der einzige Weg, wie Daten verloren gehen können. Den fehlenden Mount fängt der Startcheck ab: Ohne Volume auf `/data` startet der Container gar nicht erst. Einen nächtlichen Dump bringt die Anwendung bewusst **nicht** mit – alles Sicherungswürdige liegt unter `/data`, und für Sicherungen ist die Betriebsebene zuständig (Snapshots des Volumes in Coolify bzw. auf dem Host). Das Restrisiko bleibt damit: Ein Volume, das zwar gemountet, aber nirgends gesichert wird, überlebt keinen Plattenschaden.
+**Das Volume** ist der einzige Weg, wie Daten verloren gehen können. Anders als in der ersten Fassung dieser Spec fängt das kein Startcheck mehr ab: Ein benanntes Volume legt Docker an, wenn es fehlt – ein `docker compose down -v` oder ein Deployment ohne eingerichteten persistenten Speicher wirft die Lernpakete deshalb still weg. Einen nächtlichen Dump bringt die Anwendung bewusst **nicht** mit – alles Sicherungswürdige liegt in `pgdata`, und für Sicherungen ist die Betriebsebene zuständig (Snapshots des Volumes in Coolify bzw. auf dem Host). Das Restrisiko bleibt damit doppelt: ein Volume, das nirgends gesichert wird, überlebt keinen Plattenschaden – und ein `-v` zu viel kostet alles.
 
 **Die Lösungen stehen im Seitenquelltext.** Bewusst akzeptiert: Es gibt keine Noten, die Seite dient dem Üben. Wer den Quelltext liest, betrügt sich selbst.
 
-**Ein Container statt zwei** bedeutet, dass ein Postgres-Update ein Neubauen des Images heißt und dass `supervisord` die Prozesse überwacht statt Docker. Bewusste Entscheidung zugunsten eines einzelnen Deployment-Artefakts.
+**Zwei Dienste statt einem Abbild** bedeutet, dass das Deployment ein Compose-Verbund ist und nicht ein einzelnes Image: Coolify muss über `compose.yml` deployen. Dafür ist ein Postgres-Update ein Versionswechsel im `image:`-Eintrag statt eines Image-Neubaus, und Docker überwacht die Prozesse selbst – es braucht keinen Prozessverwalter im Container.
