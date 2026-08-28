@@ -15,13 +15,12 @@ Anfang der Antwort fehlt. Deshalb prueft dieser Test ausdruecklich, dass
 bei scrollTop = 0 nichts oberhalb des Sichtfensters liegt.
 """
 
-import time
-
 from tests.browser.conftest import (
     abdruck,
     flashcard,
     frage,
     laden,
+    ruhe_abwarten,
     warten_bis_anders,
 )
 
@@ -49,28 +48,6 @@ CODEBLOCK = (
     "vierte_zahl, fuenfte_zahl, sechste_zahl)\n"
     "```\n"
 )
-
-
-def _ruhe_abwarten(blatt) -> None:
-    """Wartet, bis die Drehung der Karte zu Ende ist.
-
-    Waehrend der Drehung (0,55 s) sind die gemessenen Rechtecke schraeg
-    und damit unbrauchbar. Gewartet wird auf den Stillstand der
-    Verwandlung, nicht auf eine feste Zeit - unter
-    prefers-reduced-motion faellt die Drehung ganz weg, dann ist es
-    sofort so weit.
-    """
-    letzte, gleich, ende = None, 0, time.monotonic() + 5
-    while time.monotonic() < ende:
-        jetzt = blatt.evaluate(
-            "() => getComputedStyle(document.getElementById('karte-innen')).transform"
-        )
-        gleich = gleich + 1 if jetzt == letzte else 0
-        letzte = jetzt
-        if gleich >= 3:
-            return
-        blatt.wait_for_timeout(50)
-    raise AssertionError("Die Karte kommt nicht zur Ruhe.")
 
 
 # Misst den Scrollbereich, in dem der Inhalt der Rueckseite steht: Wo
@@ -113,7 +90,7 @@ def test_lange_rueckseite_scrollt_in_der_karte_und_beginnt_am_anfang(seite, bund
     vorher = abdruck(seite)
     seite.keyboard.press(" ")
     assert warten_bis_anders(seite, vorher), "Die Leertaste hat die Karte nicht umgedreht."
-    _ruhe_abwarten(seite)
+    ruhe_abwarten(seite)
 
     messung = seite.evaluate(_MESSUNG)
     assert messung["gefunden"], "Der Anfang der Rueckseite steht gar nicht auf der Seite."
@@ -170,7 +147,7 @@ def test_langes_wort_und_codeblock_lassen_die_seite_nicht_seitwaerts_scrollen(se
     vorher = abdruck(seite)
     seite.keyboard.press(" ")
     assert warten_bis_anders(seite, vorher)
-    _ruhe_abwarten(seite)
+    ruhe_abwarten(seite)
     assert _seitwaerts(seite) <= 1, "Die Rueckseite mit dem langen Wort scrollt waagerecht."
 
     vorher = abdruck(seite)
@@ -181,7 +158,7 @@ def test_langes_wort_und_codeblock_lassen_die_seite_nicht_seitwaerts_scrollen(se
     vorher = abdruck(seite)
     seite.keyboard.press("b")
     assert warten_bis_anders(seite, vorher)
-    _ruhe_abwarten(seite)
+    ruhe_abwarten(seite)
     assert _seitwaerts(seite) <= 1, "Die Aufloesung mit dem Codeblock scrollt waagerecht."
 
 
@@ -195,5 +172,5 @@ def test_langes_wort_scrollt_auch_am_handy_nicht_seitwaerts(handy, bundle):
     assert _seitwaerts(handy) <= 1, "Die Karte scrollt am Handy waagerecht."
 
     handy.get_by_role("button", name="Umdrehen").click()
-    _ruhe_abwarten(handy)
+    ruhe_abwarten(handy)
     assert _seitwaerts(handy) <= 1, "Die Rueckseite scrollt am Handy waagerecht."

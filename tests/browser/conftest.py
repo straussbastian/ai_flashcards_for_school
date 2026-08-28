@@ -377,6 +377,30 @@ def knoepfe(blatt: Page) -> list[dict]:
     }""")
 
 
+def sichtbare_seite(blatt: Page) -> str:
+    """Der Text der Kartenseite, die die Lernende tatsaechlich vor sich hat.
+
+    Vorder- und Rueckseite liegen deckungsgleich uebereinander; im Baum
+    stehen immer beide. Welche zu sehen ist, entscheidet die Drehung -
+    und damit das, was ein Klick in die Mitte der Karte treffen wuerde.
+    Mehrere Punkte, weil die Mitte der Karte auch einmal leer sein kann.
+    """
+    return blatt.evaluate("""() => {
+      const karte = document.getElementById('karte').getBoundingClientRect();
+      for (const [fx, fy] of [[.5,.5],[.5,.2],[.5,.8],[.25,.5],[.75,.5]]) {
+        let el = document.elementFromPoint(karte.left + karte.width * fx,
+                                           karte.top + karte.height * fy);
+        while (el && el.parentElement && el.parentElement.id !== 'karte-innen') {
+          el = el.parentElement;
+        }
+        if (el && el.parentElement && el.parentElement.id === 'karte-innen') {
+          return el.innerText.trim();
+        }
+      }
+      return '';
+    }""")
+
+
 def abdruck(blatt: Page) -> str:
     """Ein Abbild dessen, was gerade zu sehen ist.
 
@@ -426,6 +450,39 @@ def ruhig_bleiben(blatt: Page, vorher: str) -> bool:
             return False
         blatt.wait_for_timeout(25)
     return True
+
+
+def ruhe_abwarten(blatt: Page) -> None:
+    """Wartet, bis die Drehung der Karte zu Ende ist.
+
+    Waehrend der Drehung (0,55 s) liegt die Rueckseite schraeg im Raum:
+    Ein Klick in die Kartenmitte trifft noch die Vorderseite, und
+    gemessene Rechtecke sind unbrauchbar. Gewartet wird auf den
+    Stillstand der Verwandlung und nicht auf eine feste Zeit - unter
+    prefers-reduced-motion faellt die Drehung ganz weg, dann ist es
+    sofort so weit.
+    """
+    letzte, gleich, ende = None, 0, time.monotonic() + WARTE_FRIST + 2
+    while time.monotonic() < ende:
+        jetzt = blatt.evaluate(
+            "() => getComputedStyle(document.getElementById('karte-innen')).transform"
+        )
+        gleich = gleich + 1 if jetzt == letzte else 0
+        letzte = jetzt
+        if gleich >= 3:
+            return
+        blatt.wait_for_timeout(50)
+    raise AssertionError("Die Karte kommt nicht zur Ruhe.")
+
+
+def umblaettern(blatt: Page, taste: str) -> None:
+    """Eine Taste druecken und abwarten, bis der neue Zustand steht."""
+    vorher = abdruck(blatt)
+    druecken(blatt, taste)
+    assert warten_bis_anders(blatt, vorher), (
+        f"Die Taste {taste!r} hat nichts bewirkt. Zustand: {vorher!r}"
+    )
+    ruhe_abwarten(blatt)
 
 
 def laden(blatt: Page, url: str) -> None:
