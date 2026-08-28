@@ -428,10 +428,19 @@ def ruhig_bleiben(blatt: Page, vorher: str) -> bool:
     return True
 
 
+def laden(blatt: Page, url: str) -> None:
+    """Die Lernseite aufrufen und abwarten, bis der Runner gezeichnet hat.
+
+    Gewartet wird auf einen Inhalt in der Karte und nicht auf die
+    Tastenleiste: Die ist am Handy ausgeblendet, dort wartete man ewig.
+    """
+    blatt.goto(url)
+    blatt.wait_for_selector("#karte-innen > *", state="attached")
+
+
 def starten(blatt: Page, url: str) -> None:
     """Seite laden und den Durchlauf mit der Eingabetaste beginnen."""
-    blatt.goto(url)
-    blatt.wait_for_selector("#tastenleiste")
+    laden(blatt, url)
     vorher = abdruck(blatt)
     blatt.keyboard.press("Enter")
     assert warten_bis_anders(blatt, vorher), "Die Eingabetaste hat den Durchlauf nicht gestartet."
