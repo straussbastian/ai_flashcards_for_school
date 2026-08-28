@@ -37,6 +37,7 @@ from pathlib import Path
 
 import pytest
 from playwright.sync_api import Page, sync_playwright
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from sqlalchemy import create_engine, delete, select
 from sqlalchemy.orm import Session
 
@@ -296,6 +297,27 @@ def seite(browser, meldungen: dict[str, list[str]]):
 
 
 @pytest.fixture
+def seite_ohne_drehung(browser, meldungen: dict[str, list[str]]):
+    """Wie "seite", nur mit prefers-reduced-motion.
+
+    Die Spec sieht das ausdruecklich vor: "Bei prefers-reduced-motion:
+    reduce entfaellt die Drehung, die Rueckseite erscheint direkt." Fuer
+    den Leistentest, der viele hundert Zustandswechsel durchgeht, ist das
+    ausserdem der Unterschied zwischen einer und mehreren Minuten.
+    """
+    kontext = browser.new_context(viewport={"width": 1280, "height": 900},
+                                  reduced_motion="reduce")
+    blatt = kontext.new_page()
+    blatt.on("console", lambda m: meldungen["konsole"].append(f"{m.type}: {m.text}"))
+    blatt.on("pageerror", lambda f: meldungen["fehler"].append(str(f)))
+    yield blatt
+    kontext.close()
+    assert meldungen["fehler"] == [], (
+        f"Der Runner hat eine unbehandelte Ausnahme geworfen: {meldungen['fehler']}"
+    )
+
+
+@pytest.fixture
 def handy(browser, meldungen: dict[str, list[str]]):
     """Dasselbe am Handy-Viewport (390 px, die Breite aus der Spec)."""
     kontext = browser.new_context(viewport={"width": 390, "height": 844},
@@ -347,7 +369,19 @@ def leistentasten(blatt: Page) -> list[str]:
     """
     tasten = []
     for eintrag in leiste(blatt).split("·"):
-        for wort in eintrag.split():
+        woerter = eintrag.split()
+        if not woerter:
+            continue
+        # Kein stilles Ueberspringen: Nennt die Leiste eine Taste, die
+        # dieser Test nicht kennt, soll er darueber stolpern und nicht
+        # so tun, als gaebe es sie nicht. Nur so zieht der Leistentest
+        # mit, wenn jemand eine neue Taste einbaut.
+        assert woerter[0] in TASTENNAMEN, (
+            f"Die Tastenleiste nennt {woerter[0]!r}. Diese Taste kennt der Test nicht - "
+            f"traeg sie in TASTENNAMEN (tests/browser/conftest.py) ein, damit sie "
+            f"mitgeprueft wird. Ganze Leiste: {leiste(blatt)!r}"
+        )
+        for wort in woerter:
             if wort in TASTENNAMEN:
                 tasten.append(wort)
             else:
@@ -355,26 +389,43 @@ def leistentasten(blatt: Page) -> list[str]:
     return tasten
 
 
-def knoepfe(blatt: Page) -> list[dict]:
-    """Alle Knoepfe, die man tatsaechlich anklicken kann - mit Beschriftung.
+# Ein Knopf zaehlt als erreichbar, wenn ein Klick auf seine Mitte auch
+# auf ihm landet. Das ist absichtlich schaerfer als "sichtbar": Die
+# Rueckseite der Karte liegt deckungsgleich ueber der Vorderseite und ist
+# weggedreht - sie hat eine Groesse, ist aber nicht zu treffen.
+_JS_KNOEPFE = """
+  const erreichbar = [];
+  for (const b of document.querySelectorAll('button')) {
+    if (b.disabled) continue;
+    const r = b.getBoundingClientRect();
+    if (!r.width || !r.height) continue;
+    const el = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    if (!el || !b.contains(el)) continue;
+    erreichbar.push(b.innerText.trim());
+  }
+"""
 
-    "Tatsaechlich anklicken" heisst: Ein Klick auf die Mitte des Knopfes
-    landet auch auf ihm. Das ist absichtlich schaerfer als "sichtbar":
-    Die Rueckseite der Karte liegt deckungsgleich ueber der Vorderseite
-    und ist weggedreht - sie hat eine Groesse, ist aber nicht zu treffen.
-    """
-    return blatt.evaluate("""() => {
-      const treffer = [];
-      for (const b of document.querySelectorAll('button')) {
-        if (b.disabled) continue;
-        const r = b.getBoundingClientRect();
-        if (!r.width || !r.height) continue;
-        const el = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
-        if (!el || !b.contains(el)) continue;
-        treffer.push({ text: b.innerText.trim() });
-      }
-      return treffer;
-    }""")
+# Ein Abbild dessen, was gerade zu sehen ist - in EINEM Aufruf, weil
+# darauf gewartet wird und jede Runde ueber die Browserbruecke Zeit
+# kostet. Die Beschriftungen werden sortiert, weil die Antworten bei
+# jedem Durchlauf neu gemischt werden: Ihre Reihenfolge ist kein
+# Unterschied im Zustand. Der Fortschritt zaehlt nur, solange die
+# Kopfzeile zu sehen ist - sie behaelt ihren letzten Text, wenn der
+# Runner zur Startseite zurueckgeht.
+JS_ABDRUCK = r"""() => {
+  const kopf = document.getElementById('kopf').hidden
+    ? '' : document.getElementById('fortschritt-text').innerText;
+  const leiste = document.getElementById('tastenleiste').innerText;
+  const inhalt = document.getElementById('karte-innen').innerText;
+  %s
+  erreichbar.sort();
+  return [kopf.trim(), leiste.trim(), inhalt.trim(), erreichbar.join(' | ')].join('\n--\n');
+}""" % _JS_KNOEPFE
+
+
+def knoepfe(blatt: Page) -> list[str]:
+    """Die Beschriftungen aller Knoepfe, die man tatsaechlich anklicken kann."""
+    return blatt.evaluate("() => { %s return erreichbar; }" % _JS_KNOEPFE)
 
 
 def sichtbare_seite(blatt: Page) -> str:
@@ -402,23 +453,8 @@ def sichtbare_seite(blatt: Page) -> str:
 
 
 def abdruck(blatt: Page) -> str:
-    """Ein Abbild dessen, was gerade zu sehen ist.
-
-    Dient dazu, eine Wirkung nachzuweisen ("nach der Taste sieht es
-    anders aus") und zwei Zustaende auseinanderzuhalten. Die Beschriftungen
-    der Knoepfe werden sortiert, weil die Antworten bei jedem Durchlauf neu
-    gemischt werden - die Reihenfolge ist also kein Unterschied im Zustand.
-    """
-    # Der Fortschritt zaehlt nur, solange die Kopfzeile ueberhaupt zu sehen
-    # ist: Sie behaelt ihren letzten Text, wenn der Runner zur Startseite
-    # zurueckgeht, und der gehoert dort nicht mehr zum Zustand.
-    kopf = blatt.evaluate(
-        "() => document.getElementById('kopf').hidden ? '' "
-        ": document.getElementById('fortschritt-text').innerText"
-    ).strip()
-    inhalt = blatt.locator("#karte-innen").inner_text().strip()
-    beschriftungen = sorted(k["text"] for k in knoepfe(blatt))
-    return f"{kopf}\n{leiste(blatt)}\n{inhalt}\n{beschriftungen}"
+    """Siehe JS_ABDRUCK."""
+    return blatt.evaluate(JS_ABDRUCK)
 
 
 def druecken(blatt: Page, taste: str) -> None:
@@ -431,24 +467,28 @@ def warten_bis_anders(blatt: Page, vorher: str) -> bool:
 
     Der Runner arbeitet mit Fristen (300 ms bis der Fokus wandert, 350 ms
     bis die Selbsteinschaetzung weiterblaettert) und einer Drehung von
-    550 ms. Warten statt schlafen: Ein festes sleep waere entweder zu kurz
-    oder verschenkte bei jedem Tastendruck Zeit.
+    550 ms. Gewartet wird darauf, dass etwas anders ist, statt fest zu
+    schlafen: Ein festes sleep waere entweder zu kurz oder verschenkte
+    bei jedem Tastendruck Zeit. Geprueft wird im Browser selbst, damit
+    das Warten nicht aus lauter Einzelaufrufen besteht.
     """
-    ende = time.monotonic() + WARTE_FRIST
-    while time.monotonic() < ende:
-        if abdruck(blatt) != vorher:
-            return True
-        blatt.wait_for_timeout(25)
-    return False
+    try:
+        blatt.wait_for_function(
+            "(vorher) => (%s)() !== vorher" % JS_ABDRUCK,
+            arg=vorher, timeout=WARTE_FRIST * 1000,
+        )
+        return True
+    except PlaywrightTimeoutError:
+        return False
 
 
 def ruhig_bleiben(blatt: Page, vorher: str) -> bool:
     """Gegenstueck zu warten_bis_anders: Nichts darf sich aendern."""
-    ende = time.monotonic() + 0.6
+    ende = time.monotonic() + 0.8
     while time.monotonic() < ende:
         if abdruck(blatt) != vorher:
             return False
-        blatt.wait_for_timeout(25)
+        blatt.wait_for_timeout(50)
     return True
 
 
@@ -469,9 +509,9 @@ def ruhe_abwarten(blatt: Page) -> None:
         )
         gleich = gleich + 1 if jetzt == letzte else 0
         letzte = jetzt
-        if gleich >= 3:
+        if gleich >= 2:
             return
-        blatt.wait_for_timeout(50)
+        blatt.wait_for_timeout(25)
     raise AssertionError("Die Karte kommt nicht zur Ruhe.")
 
 

@@ -77,10 +77,10 @@ def test_antworttext_titel_und_klasse_bleiben_klartext(seite, bundle, meldungen)
     _keine_einschleusung(seite, "Frage", [GIFT])
 
     # --- Rueckseite: "Deine Antwort" und die Loesung ---
-    giftig = [k for k in knoepfe(seite) if GIFT in k["text"]]
+    giftig = [k for k in knoepfe(seite) if GIFT in k]
     assert len(giftig) == 1, f"Die vergiftete Antwort ist nicht zu sehen: {knoepfe(seite)}"
     vorher = abdruck(seite)
-    druecken(seite, giftig[0]["text"].split()[0])
+    druecken(seite, giftig[0].split()[0])
     assert warten_bis_anders(seite, vorher)
     _keine_einschleusung(seite, "Aufloesung", [GIFT])
 

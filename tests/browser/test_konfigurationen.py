@@ -65,8 +65,8 @@ def test_feste_reihenfolge_mischt_die_antworten_trotzdem(seite, bundle):
     gesehen = set()
     for _ in range(10):
         starten(seite, url)
-        gesehen.add(tuple(k["text"].split("\n", 1)[1] for k in knoepfe(seite)
-                          if "\n" in k["text"] and k["text"].split("\n", 1)[1] in ANTWORTEN))
+        gesehen.add(tuple(k.split("\n", 1)[1] for k in knoepfe(seite)
+                          if "\n" in k and k.split("\n", 1)[1] in ANTWORTEN))
 
     assert len(gesehen) > 1, (
         "Zehn Durchlaeufe, immer dieselbe Antwortreihenfolge - gemischt wird da nichts: "
@@ -103,11 +103,11 @@ def test_ohne_selbsteinschaetzung_traegt_die_rueckseite_einen_weiter_knopf(seite
 
     # Ein anklickbarer Knopf auf der Rueckseite - fuer alle, die die Maus
     # benutzen. "beenden" gehoert zur Kopfzeile, nicht zur Karte.
-    auf_der_karte = [k for k in knoepfe(seite) if "beenden" not in k["text"]]
+    auf_der_karte = [k for k in knoepfe(seite) if "beenden" not in k]
     assert len(auf_der_karte) == 1, (
         f"Die Rueckseite traegt keinen einzigen Knopf: {knoepfe(seite)}"
     )
-    assert "weiter" in auf_der_karte[0]["text"].lower()
+    assert "weiter" in auf_der_karte[0].lower()
 
 
 def test_ohne_selbsteinschaetzung_kommt_man_ohne_maus_und_ohne_pfeiltaste_weiter(seite, bundle):
@@ -136,8 +136,8 @@ def test_ohne_selbsteinschaetzung_zaehlen_nur_die_fragen(seite, bundle):
     umblaettern(seite, "Leertaste")   # umdrehen
     umblaettern(seite, "A")           # weiter zur Frage
 
-    buchstabe = next(k["text"].split("\n")[0] for k in knoepfe(seite)
-                     if k["text"].endswith(ANTWORTEN[0]))
+    buchstabe = next(k.split("\n")[0] for k in knoepfe(seite)
+                     if k.endswith(ANTWORTEN[0]))
     vorher = abdruck(seite)
     seite.keyboard.press(buchstabe.lower())
     assert warten_bis_anders(seite, vorher)
