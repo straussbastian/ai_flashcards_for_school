@@ -125,7 +125,7 @@ body::before {
   padding: .25rem .4rem;
   border-radius: 6px;
 }
-.beenden:hover { color: var(--gedaempft-hell); }
+@media (hover: hover) { .beenden:hover { color: var(--gedaempft-hell); } }
 
 /* ===================== Buehnenmitte ===================== */
 
@@ -243,7 +243,17 @@ body::before {
   cursor: pointer;
   transition: background .15s ease, transform .1s ease;
 }
-.antwort:hover:not(:disabled) { background: rgba(255, 255, 255, .72); }
+/* Nur fuer Geraete mit echtem Mauszeiger. Auf einem Touchgeraet bleibt
+   der Hover-Zustand am zuletzt beruehrten Element haengen, bis anderswo
+   getippt wird. Beim Kartenwechsel wird die Antwortliste neu gebaut, und
+   der Knopf, der an die zuletzt beruehrte Stelle rutscht, erbt ihn: Auf
+   einer noch unbeantworteten Frage stand dann eine Antwort heller da als
+   die uebrigen und sah aus wie ein Hinweis auf die Loesung - und traf,
+   weil das Mischen zufaellig ist, genauso oft die falsche.
+   Festgehalten in tests/browser/test_hover_am_handy.py. */
+@media (hover: hover) {
+  .antwort:hover:not(:disabled) { background: rgba(255, 255, 255, .72); }
+}
 .antwort:active:not(:disabled) { transform: translateY(1px); }
 .antwort:disabled { cursor: default; }
 .antwort:focus-visible { outline: 3px solid var(--tinte); outline-offset: 2px; }
@@ -301,7 +311,7 @@ body::before {
 /* Tastenkuerzel auf dunklem Knopf braucht eine hellere Plakette als auf dem Zettel. */
 .knopf .taste { background: rgba(255, 255, 255, .2); color: inherit; }
 .knopf.leise .taste { background: rgba(43, 36, 16, .16); }
-.knopf:hover { opacity: .88; }
+@media (hover: hover) { .knopf:hover { opacity: .88; } }
 .knopf:active { transform: translateY(1px); }
 .knopf:focus-visible { outline: 3px solid var(--tinte); outline-offset: 3px; }
 .knopf.leise { background: rgba(43, 36, 16, .12); color: var(--tinte); }
@@ -330,7 +340,7 @@ body::before {
   cursor: pointer;
   transition: background .15s ease;
 }
-.navi:hover:not(:disabled) { background: #303b46; }
+@media (hover: hover) { .navi:hover:not(:disabled) { background: #303b46; } }
 .navi:disabled { opacity: .35; cursor: default; }
 .navi:focus-visible { outline: 3px solid var(--fuellung); outline-offset: 2px; }
 
