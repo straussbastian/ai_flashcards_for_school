@@ -133,8 +133,9 @@ def registrieren(server: MCPServer) -> None:
 
     @server.tool(
         description=(
-            "Listet alle Lernpakete mit Adresse, Link, Titel, Klasse, "
-            "Kartenzahl und Zustand auf."
+            "Listet die Lernpakete mit Adresse, Link, Titel, Klasse, "
+            "Kartenzahl und Zustand auf. Standardmäßig nur die aktiven - "
+            "mit nur_aktive=false kommen die deaktivierten dazu."
         )
     )
     @als_werkzeug
@@ -145,8 +146,14 @@ def registrieren(server: MCPServer) -> None:
         ] = None,
         nur_aktive: Annotated[
             bool,
-            Field(default=False, description="Deaktivierte Lernpakete weglassen."),
-        ] = False,
+            Field(
+                default=True,
+                description=(
+                    "Deaktivierte Lernpakete weglassen. Standard: ja - "
+                    "false zeigt auch die stillgelegten."
+                ),
+            ),
+        ] = True,
     ) -> dict:
         async with sitzung() as offene:
             zeilen = await dienste.bundles_auflisten(
