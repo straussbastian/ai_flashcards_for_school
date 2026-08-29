@@ -163,15 +163,39 @@ body::before {
 /* Nur Ankerpunkt fuer die Tabulatorreihenfolge, kein sichtbarer Ring. */
 .karte:focus { outline: none; }
 
+/* Raster statt absoluter Positionierung, und das ist der Kern der Sache.
+
+   Vorher lag die Rueckseite mit "position: absolute; inset: 0" auf der
+   Vorderseite und uebernahm damit deren Hoehe. Bei kurzer Frage und langer
+   Antwort - dem Normalfall - bekam der lange Text die Hoehe des kurzen, und
+   die max-height weiter unten kam auf der Rueckseite nie zum Zuge.
+   Nachgemessen am Handy (390x844): Rueckseite 272 px hoch, Inhalt 839 px,
+   erlaubt waeren 612 px gewesen; die Knoepfe am unteren Kartenrand waren
+   dabei abgeschnitten.
+
+   Jetzt liegen beide Seiten in derselben Rasterzelle (grid-area: 1 / 1) und
+   ueberlagern sich wie zuvor - aber jede bekommt ihre eigene, vom Inhalt
+   bestimmte Hoehe. "align-items: start" ist dafuer Pflicht: Ohne das
+   streckt das Raster beide Seiten auf die Hoehe der hoeheren, und die
+   Messung im Runner (hoeheNachfuehren) bekaeme fuer beide denselben Wert.
+
+   Die Hoehe des Rahmens setzt der Runner auf die der gerade sichtbaren
+   Seite; "height" gehoert deshalb mit in den Uebergang, damit die Karte
+   beim Umdrehen weich waechst statt zu springen. */
 .karte-innen {
   position: relative;
-  transition: transform var(--umklappen);
+  display: grid;
+  align-items: start;
+  transition: transform var(--umklappen), height var(--umklappen);
   transform-style: preserve-3d;
 }
 .karte.gedreht .karte-innen { transform: rotateY(180deg); }
 .karte.ohne-animation .karte-innen { transition: none; }
 
 .seite {
+  /* Beide Seiten in dieselbe Rasterzelle: Sie ueberlagern sich, ohne dass
+     eine von ihnen aus dem Fluss genommen werden muss. Siehe .karte-innen. */
+  grid-area: 1 / 1;
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
   border-radius: 3px 3px 6px 6px;
@@ -185,8 +209,6 @@ body::before {
   min-height: 20rem;
 }
 .seite.rueckseite {
-  position: absolute;
-  inset: 0;
   transform: rotateY(180deg);
   background: var(--zettel-hinten);
 }

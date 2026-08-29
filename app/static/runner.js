@@ -508,6 +508,9 @@
 
     karteErsetzen(seiten, mitAnimation);
     $("karte").classList.toggle("gedreht", beantwortet(k) || k.aufgedeckt === true);
+    // Noch einmal, weil die sichtbare Seite erst mit der Zeile darueber
+    // feststeht: karteErsetzen hat die Vorderseite gemessen.
+    hoeheNachfuehren();
     kopfUndFussSetzen();
   };
 
@@ -587,6 +590,37 @@
   // damit der Wiederholungsdurchlauf frisch gemischt startet.
   const ursprung = (k) => BUNDLE.karten.find((o) => o.vorderseite === k.vorderseite);
 
+  /* Die Karte ist so hoch wie die Seite, die gerade zu sehen ist.
+
+     Das gehoert zwingend zum Raster in lernseite.css (.karte-innen):
+     Beide Seiten liegen dort in derselben Rasterzelle und haben mit
+     "align-items: start" jede ihre eigene, vom Inhalt bestimmte Hoehe.
+     Ohne diese Nachfuehrung waere der Rahmen immer so hoch wie die
+     HOEHERE der beiden - eine kurze Frage bekaeme schon vorn die Hoehe
+     ihrer langen Antwort und stuende in einem leeren Feld.
+
+     Gemessen wird offsetHeight und nicht scrollHeight: scrollHeight ist
+     nie kleiner als der Kasten selbst. Waere der Rahmen gerade noch von
+     einer langen Rueckseite hoch, lieferte scrollHeight fuer die kurze
+     Vorderseite genau diese alte Hoehe zurueck - die Karte wuerde
+     wachsen, aber nie wieder schrumpfen. offsetHeight ist die
+     tatsaechliche Hoehe der Seite, und die bestimmt im Raster ihr Inhalt,
+     begrenzt durch min-height und max-height aus dem CSS. Damit gilt die
+     Hoehengrenze endlich auf BEIDEN Seiten. */
+  const hoeheNachfuehren = () => {
+    const innen = $("karte-innen");
+    const seiten = [...innen.children].filter((e) => e.classList.contains("seite"));
+    if (!seiten.length) return;
+    const gedreht = $("karte").classList.contains("gedreht");
+    // Die Rueckfalloption auf seiten[0] deckt die Start- und die
+    // Ergebnisseite ab: Sie bestehen aus einer einzelnen Seite, und die
+    // Ergebnisseite traegt dabei ausgerechnet die Klasse "rueckseite"
+    // (siehe zeichneErgebnis), ohne dass die Karte gedreht waere.
+    const aktiv = (gedreht ? innen.querySelector(".rueckseite")
+                           : innen.querySelector(".seite:not(.rueckseite)")) || seiten[0];
+    innen.style.height = `${aktiv.offsetHeight}px`;
+  };
+
   const karteErsetzen = (seiten, mitAnimation) => {
     const karte = $("karte");
     if (!mitAnimation) {
@@ -594,7 +628,12 @@
       karte.classList.remove("gedreht");
     }
     const innen = $("karte-innen");
+    // Die alte Hoehe muss vor dem Messen fort: Sonst begrenzt sie die
+    // frisch eingesetzten Seiten, und die neue Karte erbte die Hoehe der
+    // vorigen.
+    innen.style.height = "";
     innen.replaceChildren(...seiten);
+    hoeheNachfuehren();
     if (!mitAnimation) {
       // Ein Frame ohne Uebergang, damit beim Blaettern nichts flackert.
       requestAnimationFrame(() => karte.classList.remove("ohne-animation"));
@@ -615,6 +654,7 @@
     if (k.art !== "flashcard") return;
     k.aufgedeckt = true;
     $("karte").classList.add("gedreht");
+    hoeheNachfuehren();    // Die Rueckseite ist meist laenger als die Frage.
     kopfUndFussSetzen();   // Die Tastenleiste zeigt jetzt A und B.
     // alsText(): Die Rueckseite ist HTML; die Sprachausgabe soll den
     // Text hoeren, nicht das Markup.
@@ -641,6 +681,7 @@
     const richtig = position === k.richtige_position;
     zeichneKarte(true);
     $("karte").classList.add("gedreht");
+    hoeheNachfuehren();
     ansagen(richtig
       ? "Richtig."
       : `Falsch. Richtig ist: ${k.gemischte[k.richtige_position].text}`);
@@ -716,6 +757,15 @@
       }
     }
   });
+
+  /* Die Hoehengrenze der Karte haengt an 100dvh (siehe lernseite.css,
+     Abschnitt "Lange Inhalte"). Aendert sich das Sichtfenster - Drehen des
+     Handys, ein aufgezogenes Fenster, die ein- und ausfahrende Adressleiste
+     am Handy -, aendert sich damit auch die Hoehe, die die sichtbare Seite
+     einnehmen darf. Ohne dieses Nachfuehren behielte der Rahmen die einmal
+     gesetzte Hoehe: Nach dem Drehen ins Querformat stuende die Karte
+     entweder ueber den Bildschirmrand hinaus oder liesse Platz ungenutzt. */
+  window.addEventListener("resize", hoeheNachfuehren);
 
   zeichneStart();
 })();
