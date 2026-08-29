@@ -10,13 +10,6 @@ services:
       db:
         condition: service_healthy
     env_file: .env
-
-    ports:
-      # 127.0.0.1: nur vom Rechner selbst erreichbar, nach aussen nur ueber
-      # einen Tunnel. Auf dem Server wirkungslos - der Proxy geht ueber das
-      # Docker-Netz.
-      - "127.0.0.1:8000:8000"
-
     restart: unless-stopped
 
   db:
