@@ -176,16 +176,16 @@ async def test_deaktivieren_laesst_sich_zuruecknehmen(konfiguration, mcp_sitzung
     assert wieder["aktiv"] is True
 
 
-async def test_ein_deaktiviertes_paket_faellt_aus_der_gefilterten_liste(
-    konfiguration, mcp_sitzung
-):
+async def test_ein_deaktiviertes_paket_faellt_aus_der_liste(konfiguration, mcp_sitzung):
+    """nur_aktive ist standardmaessig an: Wer nichts angibt, sieht nur die
+    aktiven Lernpakete. Erst nur_aktive=False holt die stillgelegten dazu."""
     paket = await _paket()
     await _aufrufen("bundle_deaktivieren", slug=paket["slug"], aktiv=False)
 
-    alle = await _aufrufen("bundle_liste")
-    nur_aktive = await _aufrufen("bundle_liste", nur_aktive=True)
+    standard = await _aufrufen("bundle_liste")
+    alle = await _aufrufen("bundle_liste", nur_aktive=False)
+    assert paket["slug"] not in {eines["slug"] for eines in standard["bundles"]}
     assert paket["slug"] in {eines["slug"] for eines in alle["bundles"]}
-    assert paket["slug"] not in {eines["slug"] for eines in nur_aktive["bundles"]}
 
 
 async def test_deaktivieren_gibt_den_link_mit_zurueck(konfiguration, mcp_sitzung):
