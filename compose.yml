@@ -1,100 +1,42 @@
-# Das produktive System, nach dem Vorbild von dyntag: zwei Dienste in einer
-# Datei.
-#
-#     app  =  Lernseiten + MCP-Server + OAuth   (ein uvicorn; /mcp ist eine
-#             Route in app/main.py, kein eigener Prozess)
-#     db   =  PostgreSQL 17, das offizielle Abbild, unveraendert
-#
-#     docker compose up -d --build     # bauen und starten
-#     docker compose logs -f           # zusehen
-#     docker compose down              # beenden (Daten bleiben im Volume)
-#     docker compose down -v           # beenden UND die Daten wegwerfen
-#
-# In dieser Datei steht KEIN Wert: kein Passwort, keine Adresse, kein Port.
-# Alles kommt aus der .env, die nicht im Git liegt; welche Namen gebraucht
-# werden, steht in .env.example.
-#
-# Werte fuer die Testsuite kommen hier nie an - die stehen in compose.test.yml
-# und gelten nur fuer den jeweiligen Testlauf.
-
 name: flashcards
 
 services:
   app:
     build:
       context: .
-      # Ausdruecklich die Betriebsstufe. Ohne target baute Docker die letzte
-      # Stufe des Dockerfiles - und das ist die Teststufe mit pytest und
-      # Chromium darin (siehe compose.test.yml).
       target: betrieb
     image: flashcards
-
-    # Erst starten, wenn die Datenbank Verbindungen annimmt. Das ersetzt
-    # nicht die Wartezeit in docker/app-start.sh, sondern erspart ihr den
-    # Normalfall: depends_on deckt den geordneten Start ab, app-start.sh den
-    # Fall, dass die Datenbank spaeter im Betrieb kurz weg ist.
     depends_on:
       db:
         condition: service_healthy
-
-    # Die vollstaendige Umgebung der Anwendung, unveraendert aus der .env.
-    # Nichts wird hier ueberschrieben oder ergaenzt: Was die Anwendung im
-    # Betrieb sieht, steht an genau einer Stelle und ist dort nachlesbar.
     env_file: .env
 
     ports:
-      # APP_BIND ist in der .env auf 127.0.0.1 gesetzt. Damit ist der
-      # Container von aussen nur ueber einen ausdruecklich gestarteten Tunnel
-      # erreichbar und nie einfach so im umliegenden Netz.
-      - "${APP_BIND}:${APP_PORT}:8000"
+      # 127.0.0.1: nur vom Rechner selbst erreichbar, nach aussen nur ueber
+      # einen Tunnel. Auf dem Server wirkungslos - der Proxy geht ueber das
+      # Docker-Netz.
+      - "127.0.0.1:8000:8000"
 
     restart: unless-stopped
 
   db:
     image: postgres:17
-
-    # Legt Rolle und Datenbank beim Erststart selbst an. Genau dafuer gab es
-    # frueher docker/db-init.sh - das Abbild kann das von Haus aus, und der
-    # Weg ueber POSTGRES_* ist der, den alle kennen.
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
 
-    ports:
-      # Nur damit man von aussen an die Datenbank kommt: psql zur Fehlersuche,
-      # und ein "uvicorn --reload" auf dem Rechner, das gegen diese Datenbank
-      # arbeitet (siehe README, Abschnitt "Entwicklung"). Die Anwendung im
-      # Verbund braucht das NICHT - sie erreicht die Datenbank ueber das
-      # gemeinsame Netz unter "db".
-      #
-      # DB_BIND ist in der .env auf 127.0.0.1 gesetzt. Der Port ist damit nur
-      # vom Rechner selbst erreichbar und nie im umliegenden Netz - auf einem
-      # Server ebenso wenig wie hier.
-      - "${DB_BIND}:${DB_PORT}:5432"
+    # Kein ports-Abschnitt, mit Absicht: Die Datenbank ist von aussen
+    # nirgends erreichbar. Die Anwendung erreicht sie im Docker-Netz unter
+    # "db". Fehlersuche: docker compose exec db psql -U flashcards
 
     volumes:
-      # Ein benanntes Volume, kein Pfad vom Rechner: Das Datenverzeichnis von
-      # PostgreSQL gehoert der containerinternen postgres-Kennung und
-      # vertraegt keine Ordner, die daneben noch jemand anfasst.
-      #
-      # DIES IST DIE STELLE, AN DER DIE LERNPAKETE LIEGEN. In Coolify muss
-      # dafuer ein persistentes Volume eingerichtet sein, sonst sind sie beim
-      # naechsten Deployment fort.
       - pgdata:/var/lib/postgresql/data
 
     restart: unless-stopped
 
     healthcheck:
-      # WICHTIG, das "-h 127.0.0.1": Beim ersten Start legt das Abbild das
-      # Cluster mit initdb an und faehrt dafuer einen voruebergehenden Server
-      # hoch, der ausschliesslich auf dem Unix-Socket lauscht
-      # (listen_addresses=''). Ein pg_isready ohne -h geht ueber genau diesen
-      # Socket und meldet dort bereits "accepting connections", obwohl ueber
-      # TCP noch nichts erreichbar ist - und ueber TCP verbindet die
-      # Anwendung. Wer hier den Socket prueft, laesst depends_on zu frueh
-      # durch und bekommt sporadisch ein "Connection refused".
-      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      test: [ "CMD-SHELL", "pg_isready -h 127.0.0.1 -U $${POSTGRES_USER} -d $${POSTGRES_DB}" ]
       interval: 5s
       timeout: 5s
       retries: 10

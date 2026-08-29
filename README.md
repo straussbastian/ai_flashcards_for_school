@@ -47,9 +47,14 @@ Logs mitlesen mit `docker compose logs -f`, beenden mit
 `docker compose down`. Beim nächsten Start ist alles wieder da.
 
 Die Werte in der `.env` sind auf einem Entwicklungsrechner
-Entwicklungspasswörter; `APP_BIND=127.0.0.1` sorgt dafür, dass der Container
-nur vom Rechner selbst erreichbar ist. Für den Betrieb werden die Werte in
+Entwicklungspasswörter. Der Container ist an `127.0.0.1` gebunden und damit
+nur vom Rechner selbst erreichbar; nach außen geht es ausschließlich über
+einen ausdrücklich gestarteten Tunnel. Für den Betrieb werden die Werte in
 Coolify gesetzt und tauchen nirgends im Git auf.
+
+Die **Datenbank ist von außen nirgends erreichbar** – sie hat bewusst keinen
+veröffentlichten Port, weder hier noch auf dem Server. Die Anwendung erreicht
+sie im gemeinsamen Docker-Netz unter `db`.
 
 ## Tests
 
@@ -82,24 +87,26 @@ docker compose -f compose.test.yml run --rm test -m browser
 
 ## Entwicklung
 
-Für die Arbeit am Code mit automatischem Neuladen genügt die Datenbank aus
-dem Verbund. Sie ist über `DB_PORT` (Vorgabe: 55432) vom Rechner aus
-erreichbar:
+Gearbeitet wird durch den Container. Nach einer Änderung am Code:
 
 ```bash
-uv sync
-docker compose up -d db                      # nur die Datenbank
-export DATABASE_URL='postgresql+psycopg://flashcards:DEIN-PASSWORT@localhost:55432/flashcards'
-uv run alembic upgrade head
-uv run uvicorn app.main:app --reload
+docker compose up -d --build
 ```
 
-`DATABASE_URL` wird hier ausdrücklich überschrieben und **nicht** in der
-`.env` geändert: Der Wert dort gehört dem Verbund und zeigt auf `db:5432`,
-den Dienstnamen im gemeinsamen Docker-Netz. Ein Rechner kennt diesen Namen
-nicht – deshalb hier `localhost:55432`. Zwei Bedeutungen für dieselbe
-Variable in einer Datei zu führen, hat dieses Projekt schon einmal in einen
-unbrauchbaren Zustand gebracht.
+Das dauert wenige Sekunden: Die teuren Schichten (Systempakete, Python-Abhängigkeiten)
+liegen im Cache, neu gebaut wird nur das Kopieren von `app/`.
+
+Für einen Blick in die Datenbank geht man in den Container statt an einen
+Port:
+
+```bash
+docker compose exec db psql -U flashcards -d flashcards
+```
+
+Ein `uvicorn --reload` auf dem Rechner gegen diese Datenbank ist bewusst
+**nicht** vorgesehen. Es bräuchte einen veröffentlichten Datenbank-Port, und
+den soll es nirgends geben – auch nicht auf dem eigenen Rechner, damit die
+Verhältnisse hier dieselben sind wie auf dem Server.
 
 **Ältere lokale Datenbank vorhanden?** Migrationen wurden zwischenzeitlich
 fortlaufend nummeriert (`0001` statt eines Hash-Namens). Steht in einer
