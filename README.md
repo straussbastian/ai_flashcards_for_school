@@ -175,7 +175,9 @@ Acht Werkzeuge stehen bereit: `bundle_anlegen`, `bundle_liste`,
 `bundle_anzeigen`, `bundle_aendern`, `karten_hinzufuegen`, `karte_aendern`,
 `karte_loeschen` und `bundle_deaktivieren`. Endgültiges Löschen gibt es
 darüber bewusst nicht – `bundle_deaktivieren` schaltet ein Lernpaket
-unsichtbar, ohne etwas wegzuwerfen.
+unsichtbar, ohne etwas wegzuwerfen. `bundle_liste` zeigt standardmäßig nur
+die aktiven Lernpakete; mit `nur_aktive=false` kommen die stillgelegten
+wieder dazu.
 
 Wie du den Server mit Claude Cowork verbindest, steht in
 [docs/praxistest-cowork.md](docs/praxistest-cowork.md).
