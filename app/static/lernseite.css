@@ -532,7 +532,21 @@ body::before {
    Die Grenze: 100dvh minus dem, was ausserhalb der Karte steht.
    Nachgemessen sind das 12,32rem am Handy (Kopfzeile, die beiden
    Navigationsbalken, die Fussnote) und 12,81rem am Rechner (Kopfzeile,
-   Tastenleiste, Fussnote). 14,5rem deckt beide mit Luft ab.
+   Tastenleiste, Fussnote). 14,5rem deckte beide mit Luft ab.
+
+   Seit die Urheberzeile dazugekommen ist, steht mehr ausserhalb der
+   Karte, und der Abzug musste mitwachsen. Ihre Hoehe ist gerechnet und
+   nicht geschaetzt: 0,68rem Schriftgroesse mal Zeilenhoehe 1,5 ergibt
+   1,02rem Text, dazu 1rem Polsterung unten, macht 2,02rem. Aus 12,81rem
+   am Rechner werden damit 14,83rem. 16,5rem laesst denselben Abstand
+   nach oben wie vorher 14,5rem zu 12,81rem - rund 1,7rem.
+
+   Das ist der einzige Wert der freigegebenen Gestaltung, den die
+   Urheberzeile bewegt, und er musste sich bewegen: Bliebe der Abzug bei
+   14,5rem, duerfte die Karte hoeher werden als der Platz, der ihr noch
+   bleibt. Sichtbare Folge waere ein Scrollbalken an der ganzen Seite -
+   und tests/browser/test_kartenhoehe.py schlaege an, weil die Karte
+   dann schon unterhalb ihrer eigenen Grenze zu scrollen begaenne.
 
    Kurze Karten aendern sich dadurch nicht: min-height (20rem, am
    kleinen Schirm 17rem) gewinnt in CSS gegen max-height, und wer die
@@ -549,7 +563,7 @@ body::before {
    sind innerhalb der Karte erreichbar. Die Seite selbst scrollt
    weiterhin nie waagerecht - das bleibt Zusage der Spec. */
 .seite {
-  max-height: calc(100dvh - 14.5rem);
+  max-height: calc(100dvh - 16.5rem);
   overflow-y: auto;
   overflow-x: auto;
 }
@@ -599,3 +613,40 @@ body::before {
   align-items: safe center;
   text-align: center;
 }
+
+/* ===================== Urheberzeile ===================== */
+
+/* Der vierte Block, den der Prototyp nicht kennt. Er kam auf ausdrueckliche
+   Bitte des Auftraggebers dazu: Name, Jahr, Ort und die eigene Adresse
+   sollen unten auf der Seite stehen.
+
+   Absichtlich leiser als die .fussnote darueber - die gehoert zum Lernen
+   ("es wird nichts gespeichert"), diese Zeile gehoert zur Seite. Deshalb
+   eine Stufe kleiner (.68rem statt .7rem) und eine Stufe dunkler (#46505a
+   statt #55616c). Kein bestehender Wert wurde angefasst: keine Farbe, kein
+   Winkel, keine Zeit, keine Groesse.
+
+   flex: none wie bei .fussnote - sonst zoege die Zeile in der Flexspalte
+   .buehne Hoehe an sich, die der Zettel in der Mitte braucht. */
+.urheber {
+  flex: none;
+  margin: 0;
+  text-align: center;
+  font-size: .68rem;
+  color: #46505a;
+  padding: 0 0 1rem;
+  line-height: 1.5;
+}
+
+/* Der Verweis traegt die Farbe der Zeile und nur einen feinen Strich
+   darunter: erkennbar als Verweis, aber ohne die Aufmerksamkeit, die ein
+   blauer Link auf einer Lernseite an sich zoege. */
+.urheber a {
+  color: inherit;
+  text-decoration: none;
+  border-bottom: 1px solid var(--spur);
+}
+@media (hover: hover) {
+  .urheber a:hover { color: var(--gedaempft); border-bottom-color: var(--gedaempft); }
+}
+.urheber a:focus-visible { outline: 3px solid var(--fuellung); outline-offset: 2px; }

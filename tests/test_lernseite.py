@@ -179,3 +179,17 @@ async def test_skript_ende_in_einer_karte_zerlegt_die_seite_nicht(klient, sessio
     ende = antwort.text.rindex('</script>', start, runner_marke)
     datenblock = antwort.text[start:ende]
     assert "</script" not in datenblock
+
+
+async def test_lernseite_traegt_die_urheberzeile(klient, session):
+    """Dieselbe Zeile wie auf Start- und Fehlerseite, aus demselben Teiltemplate.
+
+    Eigener Test statt einer Zeile in tests/test_seiten.py: Die Lernseite
+    bindet urheber.html an einer anderen Stelle ein - nach der Fussnote
+    statt nach </main> - und braucht deshalb eine Datenbank.
+    """
+    await _bundle_anlegen(session)
+    text = (await klient.get("/kluge-tafel-leuchtet")).text
+    assert "Bastian Strauss, Varel" in text
+    assert "https://bastianstrauss.digital" in text
+    assert text.rindex('class="urheber"') < text.rindex("</div>")
