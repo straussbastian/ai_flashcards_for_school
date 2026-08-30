@@ -1,17 +1,138 @@
+<div align="center">
+
+<img src="docs/bilder/lernseite.svg" alt="Eine Lernseite: links ein gelber Zettel mit einer Karteikartenfrage, rechts eine Multiple-Choice-Frage mit hervorgehobener richtiger Antwort" width="820">
+
 # Flashcards für die Berufsschule
 
-Lernseiten mit Karteikarten und Multiple-Choice-Fragen. Lernende erhalten
-von ihrer Lehrkraft einen Link zu einer Lernseite. Keine Anmeldung nötig,
-keine gespeicherten Ergebnisse.
+**Karteikarten und Quizfragen als Lernseite im Netz.**
+Die Lehrkraft gibt ihrem KI-Agenten ein Arbeitsblatt und bekommt einen Link
+zurück. Die Klasse öffnet ihn und legt los – ohne Konto, ohne App,
+ohne dass irgendwo ein Ergebnis gespeichert wird.
 
-Der Verbund besteht aus **zwei** Diensten, beschrieben in `compose.yml`:
+[![Tests](https://github.com/straussbastian/ai_flashcards_for_school/actions/workflows/tests.yml/badge.svg)](https://github.com/straussbastian/ai_flashcards_for_school/actions/workflows/tests.yml)
 
-| Dienst | Was darin läuft |
+</div>
+
+---
+
+## Wie das im Alltag aussieht
+
+Die Lehrkraft sagt ihrem Agenten:
+
+> „Bau mir aus diesem Arbeitsblatt ein Lernpaket."
+
+Der Agent legt es an und antwortet mit einer Adresse aus drei Wörtern:
+
+```
+https://karten.deine-schule.de/anker-blaue-feder
+```
+
+Dieser Link geht an die Klasse – im Klassenchat, als QR-Code an der Wand,
+auf dem Arbeitsblatt. Wer ihn öffnet, sieht einen Startknopf und danach
+eine Karte nach der anderen: Zettel werden zum Umdrehen angeklickt,
+Quizfragen mit A/B/C/D beantwortet, mit Maus oder Tastatur. Falsch
+beantwortet heißt: Die richtige Antwort wird gleich mitgezeigt. Am Ende
+steht das Ergebnis, und ein Knopf setzt alles auf null.
+
+## Was die Lernseiten bewusst nicht tun
+
+| | |
 |---|---|
-| `app` | Lernseiten, MCP-Server und OAuth – ein einziger `uvicorn`. `/mcp` ist eine Route in `app/main.py`, kein eigener Prozess. |
-| `db` | PostgreSQL 17, das offizielle Abbild, unverändert |
+| **Keine Anmeldung** | Wer den Link hat, kann lernen. Kein Konto, kein Passwort, keine Klassenliste. |
+| **Keine Ergebnisse** | Die Punktzahl steht am Ende auf dem Bildschirm und ist danach fort. Sie wird nirgends gespeichert und nirgends übermittelt. |
+| **Keine Cookies, keine Zählpixel** | Der Zwischenstand lebt im Browser, solange der Durchgang läuft. |
+| **Keine Verwaltungsoberfläche** | Es gibt keinen Adminbereich, in den sich jemand einloggen könnte – Inhalte kommen ausschließlich über den KI-Agenten herein. |
+| **Kein endgültiges Löschen** | Ein Lernpaket lässt sich unsichtbar schalten, aber nicht versehentlich wegwerfen. |
 
-## Das Wichtigste zuerst: das Volume
+## Selbst betreiben – welcher Weg ist meiner?
+
+| Ich möchte … | Weg | Aufwand |
+|---|---|---|
+| es mir nur einmal ansehen | [Auf dem eigenen Rechner](#auf-dem-eigenen-rechner-ansehen) | 5 Minuten, Docker genügt |
+| es mit meinen Klassen benutzen | **[Auf einem eigenen Server](docs/betrieb-server.md)** | einmalig ~30 Minuten, ab 4 € im Monat |
+| daran mitarbeiten | [Für Entwicklerinnen und Entwickler](#für-entwicklerinnen-und-entwickler) | Docker, sonst nichts |
+
+### Auf dem eigenen Rechner ansehen
+
+Gebraucht wird nur Docker – kein Python, kein PostgreSQL, nichts sonst.
+
+```bash
+git clone https://github.com/straussbastian/ai_flashcards_for_school.git
+cd ai_flashcards_for_school
+cp .env.example .env       # Werte eintragen, siehe Kommentare darin
+docker compose up -d --build
+```
+
+`compose.yml` veröffentlicht mit Absicht keinen Port: Die Anwendung ist nur
+aus dem Docker-Netz erreichbar, genau wie später auf dem Server hinter dem
+Rückwärtsproxy. Für einen Blick in den Browser braucht es deshalb einmalig
+eine Ergänzung daneben – Docker Compose liest sie von selbst mit, und die
+`.gitignore` hält sie aus dem Repository heraus:
+
+```bash
+cat > compose.override.yml <<'ENDE'
+services:
+  app:
+    ports:
+      # 127.0.0.1: nur vom Rechner selbst erreichbar, nach aussen nur
+      # ueber einen ausdruecklich gestarteten Tunnel.
+      - "127.0.0.1:8000:8000"
+ENDE
+
+docker compose up -d
+```
+
+Dann steht die Anwendung auf `http://localhost:8000`. Prüfen:
+
+```bash
+curl -s http://localhost:8000/healthz
+# {"status":"ok","datenbank":"ok"}
+```
+
+Logs mitlesen mit `docker compose logs -f`, beenden mit
+`docker compose down`. Beim nächsten Start ist alles wieder da – außer man
+hängt ein `-v` an, siehe unten.
+
+### Auf einem eigenen Server
+
+Die vollständige Anleitung steht in **[docs/betrieb-server.md](docs/betrieb-server.md)**.
+Kurz gefasst läuft sie darauf hinaus:
+
+```bash
+curl -O https://raw.githubusercontent.com/straussbastian/ai_flashcards_for_school/main/compose.server.yml
+# eine .env mit vier Werten daneben legen
+docker compose -f compose.server.yml up -d
+```
+
+`compose.server.yml` zieht das fertige Abbild aus der GitHub-Registry,
+startet PostgreSQL daneben und stellt einen Caddy davor, der sich sein
+Zertifikat bei Let's Encrypt selbst besorgt. Auf dem Server wird nichts
+gebaut und nichts eingerichtet; das Repository muss dort nicht einmal
+liegen.
+
+## Inhalte pflegen
+
+Es gibt bewusst **keine Administrationsoberfläche**. Die Lernseiten werden
+ausschließlich über den MCP-Server unter `POST /mcp` gepflegt, den ein
+KI-Agent bedient – abgesichert mit OAuth 2.1 und dem `TEACHER_PASSWORD`.
+
+| Werkzeug | Wofür |
+|---|---|
+| `bundle_anlegen` | Ein neues Lernpaket samt Karten in einem Aufruf |
+| `bundle_liste` | Was gibt es? Standardmäßig nur die aktiven; `nur_aktive=false` zeigt auch die stillgelegten |
+| `bundle_anzeigen` | Ein Paket mit allen Karten |
+| `bundle_aendern` | Titel, Beschreibung, Klasse – der Link bleibt derselbe |
+| `karten_hinzufuegen` | Weitere Karten an ein bestehendes Paket |
+| `karte_aendern` | Eine einzelne Karte berichtigen |
+| `karte_loeschen` | Eine einzelne Karte entfernen |
+| `bundle_deaktivieren` | Das Paket unsichtbar schalten, ohne etwas wegzuwerfen |
+
+Endgültiges Löschen eines Pakets gibt es hier mit Absicht nicht.
+
+Wie der Server mit Claude Cowork verbunden wird, steht in
+[docs/praxistest-cowork.md](docs/praxistest-cowork.md).
+
+## Das Wichtigste zum Sichern: das Volume
 
 Die Lernpakete liegen im Volume **`pgdata`**, das an
 `/var/lib/postgresql/data` im Dienst `db` hängt. Wer dieses Volume sichert,
@@ -24,39 +145,29 @@ docker compose down        # beendet den Verbund, das Volume bleibt
 docker compose down -v     # beendet ihn UND wirft alle Lernpakete weg
 ```
 
-In Coolify muss für dieses Volume ein persistenter Speicher eingerichtet
-sein, sonst sind die Lernpakete nach dem nächsten Deployment fort.
+Ein Weg, die Lernpakete als Datei aus dem Server zu holen, steht in
+[docs/betrieb-server.md](docs/betrieb-server.md#im-betrieb).
 
-## Lokal betreiben
+---
 
-```bash
-cp .env.example .env       # Werte eintragen, siehe Kommentare darin
-docker compose up -d --build
-```
+## Für Entwicklerinnen und Entwickler
 
-Der Verbund läuft dann auf `http://localhost:8000`. Der Dienst `app` wartet
-selbst darauf, dass die Datenbank Verbindungen annimmt, spielt die
-Migrationen ein und startet erst dann den Webserver. Prüfen:
+Der Verbund in `compose.yml` besteht aus **zwei** Diensten:
 
-```bash
-curl -s http://localhost:8000/healthz
-# {"status":"ok","datenbank":"ok"}
-```
-
-Logs mitlesen mit `docker compose logs -f`, beenden mit
-`docker compose down`. Beim nächsten Start ist alles wieder da.
-
-Die Werte in der `.env` sind auf einem Entwicklungsrechner
-Entwicklungspasswörter. Der Container ist an `127.0.0.1` gebunden und damit
-nur vom Rechner selbst erreichbar; nach außen geht es ausschließlich über
-einen ausdrücklich gestarteten Tunnel. Für den Betrieb werden die Werte in
-Coolify gesetzt und tauchen nirgends im Git auf.
+| Dienst | Was darin läuft |
+|---|---|
+| `app` | Lernseiten, MCP-Server und OAuth – ein einziger `uvicorn`. `/mcp` ist eine Route in `app/main.py`, kein eigener Prozess. |
+| `db` | PostgreSQL 17, das offizielle Abbild, unverändert |
 
 Die **Datenbank ist von außen nirgends erreichbar** – sie hat bewusst keinen
-veröffentlichten Port, weder hier noch auf dem Server. Die Anwendung erreicht
+veröffentlichten Port, weder lokal noch auf dem Server. Die Anwendung erreicht
 sie im gemeinsamen Docker-Netz unter `db`.
 
-## Tests
+Die Werte in der `.env` sind auf einem Entwicklungsrechner
+Entwicklungspasswörter. Für den Betrieb werden sie auf dem Server gesetzt
+und tauchen nirgends im Git auf.
+
+### Tests
 
 Die Suite läuft **im Container**, gegen genau den Stapel, der später auch im
 Betrieb läuft: dasselbe Abbild (`Dockerfile`, Stufe `test` baut auf `betrieb`
@@ -85,7 +196,7 @@ docker compose -f compose.test.yml run --rm test -k oauth -x
 docker compose -f compose.test.yml run --rm test -m browser
 ```
 
-## Entwicklung
+### Entwicklung
 
 Gearbeitet wird durch den Container. Nach einer Änderung am Code:
 
@@ -93,8 +204,9 @@ Gearbeitet wird durch den Container. Nach einer Änderung am Code:
 docker compose up -d --build
 ```
 
-Das dauert wenige Sekunden: Die teuren Schichten (Systempakete, Python-Abhängigkeiten)
-liegen im Cache, neu gebaut wird nur das Kopieren von `app/`.
+Das dauert wenige Sekunden: Die teuren Schichten (Systempakete,
+Python-Abhängigkeiten) liegen im Cache, neu gebaut wird nur das Kopieren von
+`app/`.
 
 Für einen Blick in die Datenbank geht man in den Container statt an einen
 Port:
@@ -108,90 +220,58 @@ Ein `uvicorn --reload` auf dem Rechner gegen diese Datenbank ist bewusst
 den soll es nirgends geben – auch nicht auf dem eigenen Rechner, damit die
 Verhältnisse hier dieselben sind wie auf dem Server.
 
-**Ältere lokale Datenbank vorhanden?** Migrationen wurden zwischenzeitlich
-fortlaufend nummeriert (`0001` statt eines Hash-Namens). Steht in einer
-bestehenden Datenbank noch `alembic_version = 'ccc906f048c0'`, meldet
-`alembic upgrade head` „Can't locate revision identified by
-'ccc906f048c0'“. Es gibt dafür keine Migration – die Datenbank muss einmalig
-neu angelegt werden:
+<details>
+<summary><strong>Ältere lokale Datenbank vorhanden?</strong></summary>
+
+Migrationen wurden zwischenzeitlich fortlaufend nummeriert (`0001` statt
+eines Hash-Namens). Steht in einer bestehenden Datenbank noch
+`alembic_version = 'ccc906f048c0'`, meldet `alembic upgrade head` „Can't
+locate revision identified by 'ccc906f048c0'". Es gibt dafür keine
+Migration – die Datenbank muss einmalig neu angelegt werden:
 
 ```bash
 docker compose down -v     # wirft die Datenbank weg
 docker compose up -d
 ```
 
-## Tests in GitHub Actions
+</details>
 
-Bei jedem Push und jedem Pull Request läuft `.github/workflows/tests.yml`.
-Der Workflow besteht aus genau einem inhaltlichen Schritt – demselben
-Compose-Aufruf wie oben. Auf dem Runner wird nichts eingerichtet: Was die
-Tests brauchen, bringt `compose.test.yml` mit.
+### Was in GitHub Actions passiert
 
-`--exit-code-from test` macht den Rückgabewert von pytest zum Rückgabewert
-des Jobs: Ein roter Lauf ist ein roter Container ist ein roter Job.
+`.github/workflows/tests.yml` läuft bei jedem Push und jedem Pull Request
+und hat drei Jobs:
+
+| Job | Wann | Was |
+|---|---|---|
+| `tests` | immer | Derselbe Compose-Aufruf wie oben. `--exit-code-from test` macht den Rückgabewert von pytest zum Rückgabewert des Jobs: Ein roter Lauf ist ein roter Container ist ein roter Job. |
+| `abbild` | nur `main`, nur nach grünem `tests` | Baut die Stufe `betrieb` und lädt sie als `ghcr.io/straussbastian/ai_flashcards_for_school:main` hoch – das Abbild, das `compose.server.yml` zieht. |
+| `deploy` | nur `main`, nur nach grünem `tests` | Stößt das Deployment auf dem Betriebsserver an. |
+
+Die Reihenfolge ist der Punkt: Erst grün, dann ausrollen. In einem Fork
+lädt `abbild` in die Registry des Forks – dafür genügt das Token des Laufs –,
+und `deploy` bricht mit einer Klartextmeldung über die fehlenden Secrets ab.
+Die Testsuite läuft davon unbeeindruckt.
 
 Die Wegwerfwerte für den Testlauf stehen im Klartext in `compose.test.yml`.
 Sie gelten nur für den jeweiligen Lauf, die Datenbank wird danach mitsamt
-Cluster weggeworfen – keine Geheimnisse. Die echten Werte für den Betrieb
-werden in Coolify gesetzt.
+Cluster weggeworfen – keine Geheimnisse.
 
 Der erste Lauf baut das Testabbild mit kaltem Cache und lädt dabei einen
-vollständigen Chromium; das dauert einige Minuten. Ob er durchgelaufen ist,
-steht unter *Actions* im Repository sowie als Häkchen neben dem Commit.
+vollständigen Chromium; das dauert einige Minuten.
 
-## Betrieb auf Coolify
-
-Coolify zieht sich das Repository selbst per CI/CD. Einzurichten ist dort:
-
-1. Neue Anwendung aus diesem Git-Repository, **Build über `compose.yml`**
-   (Docker Compose, nicht das nackte `Dockerfile` – die Anwendung allein
-   hat keine Datenbank)
-2. **Persistentes Volume für `pgdata`** – ohne das sind die Lernpakete beim
-   nächsten Deployment fort
-3. Umgebungsvariablen aus `.env.example` setzen. `DATABASE_URL` zeigt auf
-   `db:5432`; Benutzer, Passwort und Datenbankname darin müssen zu
-   `POSTGRES_USER`, `POSTGRES_PASSWORD` und `POSTGRES_DB` passen, `BASE_URL`
-   auf die echte Domain
-4. Domain auf den Dienst `app` zuweisen, HTTPS aktivieren
-5. Healthcheck auf `/healthz`
-
-Zum Passwort: Das Abbild `postgres` legt die Rolle nur beim **Erststart** an.
-Ein später geändertes `POSTGRES_PASSWORD` lässt eine bestehende Rolle
-unberührt – die Anwendung käme dann nicht mehr an ihre Datenbank. Wer das
-Passwort wechselt, muss es zusätzlich in der Datenbank selbst ändern:
-
-```bash
-docker compose exec db psql -U flashcards -c \
-    "alter role flashcards password 'neues-passwort'"
-```
-
-## Inhalte pflegen
-
-Es gibt bewusst **keine Administrationsoberfläche**. Die Lernseiten werden
-ausschließlich über den MCP-Server unter `POST /mcp` gepflegt, den ein
-KI-Agent bedient – abgesichert mit OAuth 2.1 und dem `TEACHER_PASSWORD`.
-
-Acht Werkzeuge stehen bereit: `bundle_anlegen`, `bundle_liste`,
-`bundle_anzeigen`, `bundle_aendern`, `karten_hinzufuegen`, `karte_aendern`,
-`karte_loeschen` und `bundle_deaktivieren`. Endgültiges Löschen gibt es
-darüber bewusst nicht – `bundle_deaktivieren` schaltet ein Lernpaket
-unsichtbar, ohne etwas wegzuwerfen. `bundle_liste` zeigt standardmäßig nur
-die aktiven Lernpakete; mit `nur_aktive=false` kommen die stillgelegten
-wieder dazu.
-
-Wie du den Server mit Claude Cowork verbindest, steht in
-[docs/praxistest-cowork.md](docs/praxistest-cowork.md).
-
-## Aufbau
+### Aufbau
 
 | Datei / Verzeichnis | Inhalt |
 |---|---|
-| `compose.yml` | Der Betriebsverbund: `app` und `db` |
+| `compose.yml` | Der Entwicklungsverbund: `app` (gebaut) und `db` |
+| `compose.server.yml` | Der Betriebsverbund für einen eigenen Server: `caddy`, `app` (fertiges Abbild) und `db` |
 | `compose.test.yml` | Der Testlauf: `test` und `db`, beides flüchtig |
 | `Dockerfile` | Zwei Stufen: `betrieb` und darauf aufbauend `test` |
 | `docker/` | Die beiden Startskripte |
 | `app/` | Anwendung |
 | `migrations/` | Alembic |
 | `tests/` | Testsuite |
+| `docs/betrieb-server.md` | Betrieb auf einem eigenen Server, auch die Coolify-Variante |
+| `docs/praxistest-cowork.md` | Den MCP-Server mit Claude Cowork verbinden |
 | `docs/superpowers/specs/` | Design-Spec |
 | `docs/design/mockups/` | Freigegebene Entwürfe – Referenz für die Optik |

@@ -15,6 +15,10 @@ venv/
 .ruff_cache/
 .mypy_cache/
 
+# Lokale Compose-Ergaenzung. Compose liest sie automatisch mit; darin steht
+# z.B. das Port-Mapping fuer einen Blick in den Browser (siehe README).
+compose.override.yml
+
 # Postgres-Daten (falls lokal gemountet)
 pgdata/
 
