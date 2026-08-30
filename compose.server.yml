@@ -1,0 +1,112 @@
+# Der Verbund fuer einen eigenen Server - ohne Coolify, ohne Checkout.
+#
+# Unterschied zu compose.yml (das ist der Entwicklungsverbund):
+#
+#   * Der Dienst "app" wird nicht gebaut, sondern als fertiges Abbild von
+#     ghcr.io gezogen. Deshalb braucht dieser Server weder das Repository
+#     noch eine Buildumgebung - diese Datei allein genuegt.
+#   * Es kommt ein dritter Dienst dazu: caddy. Der nimmt HTTPS entgegen,
+#     besorgt sich das Zertifikat bei Let's Encrypt und reicht nach innen an
+#     "app" weiter. Genau das war vorher die Aufgabe von Coolify.
+#   * Statt einer .env voller einzeln gepflegter Werte werden hier fuenf
+#     Variablen gesetzt; DATABASE_URL und BASE_URL setzt diese Datei daraus
+#     selbst zusammen. Zwei Werte, die zueinander passen muessen, koennen so
+#     nicht mehr auseinanderlaufen.
+#
+# Start:
+#
+#     docker compose -f compose.server.yml up -d
+#
+# Die Anleitung dazu steht in docs/betrieb-server.md.
+
+name: flashcards
+
+services:
+
+  # --------------------------------------------------------------------------
+  # Die Tuer nach aussen. Als einziger Dienst hat er veroeffentlichte Ports.
+  # --------------------------------------------------------------------------
+  #
+  # "caddy reverse-proxy --from <domain>" schaltet die automatische
+  # HTTPS-Verwaltung ein: Beim ersten Start holt Caddy ein Zertifikat von
+  # Let's Encrypt und erneuert es danach von selbst. Port 80 wird mit
+  # veroeffentlicht, weil die Zertifikatspruefung darueber laeuft und weil
+  # Caddy von dort auf HTTPS umleitet.
+  #
+  # Kein Caddyfile: Das waere eine zweite Datei, die neben dieser liegen
+  # muesste - und dann liesse sich der Verbund nicht mehr aus einer einzelnen
+  # Datei starten. Fuer einen einzelnen Rueckwaertsproxy reicht das Kommando.
+  caddy:
+    image: caddy:2-alpine
+    command: 'caddy reverse-proxy --from ${DOMAIN:?DOMAIN fehlt - die Domain ohne Schema, z.B. karten.schule.de} --to app:8000'
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      # Muss bleiben: Hier liegen Zertifikat und Schluessel. Ohne dieses
+      # Volume holt Caddy bei jedem Neustart ein neues Zertifikat und laeuft
+      # irgendwann in die Ausstellungsgrenzen von Let's Encrypt.
+      - caddy:/data
+    depends_on:
+      - app
+    restart: unless-stopped
+
+  # --------------------------------------------------------------------------
+  # Die Anwendung: Lernseiten, MCP-Server und OAuth in einem uvicorn.
+  # --------------------------------------------------------------------------
+  app:
+    # :main ist der jeweils letzte Stand, der die Testsuite gruen durchlaufen
+    # hat (siehe .github/workflows/tests.yml). Wer einen festen Stand will,
+    # setzt IMAGE_TAG auf einen Commit-Hash.
+    image: ghcr.io/straussbastian/ai_flashcards_for_school:${IMAGE_TAG:-main}
+    pull_policy: always
+    depends_on:
+      db:
+        condition: service_healthy
+
+    # Kein ports-Abschnitt: Die Anwendung ist von aussen nur ueber caddy zu
+    # erreichen, und damit nur ueber HTTPS.
+    environment:
+      # Aus den Werten oben zusammengesetzt, nicht von Hand gepflegt. Der
+      # haeufigste Fehler beim Aufsetzen war ein Passwort, das in
+      # DATABASE_URL anders stand als in POSTGRES_PASSWORD; hier kann das
+      # nicht mehr passieren.
+      DATABASE_URL: postgresql+psycopg://flashcards:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD fehlt}@db:5432/flashcards
+      # https:// fest davor: Nach aussen gibt es nur HTTPS, und die
+      # Anwendung baut aus diesem Wert alle Links und OAuth-Adressen.
+      BASE_URL: https://${DOMAIN}
+      APP_SECRET: '${APP_SECRET:?APP_SECRET fehlt - erzeugen mit openssl rand -hex 32}'
+      TEACHER_PASSWORD: ${TEACHER_PASSWORD:?TEACHER_PASSWORD fehlt}
+      TZ: ${TZ:-Europe/Berlin}
+    restart: unless-stopped
+
+  # --------------------------------------------------------------------------
+  # Die Datenbank. Unveraendert das offizielle Abbild.
+  # --------------------------------------------------------------------------
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: flashcards
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: flashcards
+
+    # Kein ports-Abschnitt, mit Absicht: Die Datenbank ist von aussen
+    # nirgends erreichbar. Die Anwendung erreicht sie im Docker-Netz unter
+    # "db".
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+    restart: unless-stopped
+
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -h 127.0.0.1 -U flashcards -d flashcards" ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
+volumes:
+  # Hier liegen die Lernpakete. Wer das sichert, hat alles.
+  pgdata:
+  # Zertifikate von Let's Encrypt.
+  caddy:
