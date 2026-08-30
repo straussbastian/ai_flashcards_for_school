@@ -1,0 +1,22 @@
+{# Die Urheberzeile. Sie wird von den drei gestalteten Seiten eingebunden -
+   Startseite, Fehlerseite, Lernseite - und steht dort als LETZTES Kind der
+   .buehne.
+
+   Dass sie hineingehoert und nicht dahinter, hat einen Grund: .buehne ist
+   die Flexspalte mit min-height 100dvh (app/static/lernseite.css). Ein
+   Element danach liege unterhalb des Schirms und braechte jeder Seite einen
+   Scrollbalken, den sie vorher nicht hatte.
+
+   Nicht in basis.html, aus demselben Grund: Dort gaebe es keine Stelle
+   innerhalb der .buehne, und die Zustimmungsseite - die einzige weitere
+   Seite - bringt ihre eigene Gestaltung mit und soll nichts davon erben.
+
+   target="_blank" ist hier kein Reflex, sondern Absicht: Wer waehrend eines
+   Durchlaufs versehentlich auf den Verweis tippt, verliesse sonst die
+   Lernseite, und weil nichts gespeichert wird, finge er danach wieder von
+   vorn an. rel="noopener noreferrer" gehoert zwingend dazu, sobald ein
+   fremdes Dokument sonst einen Verweis auf dieses Fenster bekaeme. #}
+<p class="urheber">
+  &copy; 2026 Bastian Strauss, Varel &middot;
+  <a href="https://bastianstrauss.digital" target="_blank" rel="noopener noreferrer">bastianstrauss.digital</a>
+</p>

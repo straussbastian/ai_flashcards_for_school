@@ -262,3 +262,48 @@ def test_die_zweite_oauth_fehlerseite_ohne_umlautfehler(client, konfiguration):
     assert antwort.status_code == 400
     gefunden = umlautfehler_finden(antwort.text)
     assert gefunden == [], f"Die OAuth-Fehlerseite zeigt Ersatzschreibweisen: {gefunden}"
+
+
+# ===================== Urheberzeile =====================
+
+# Sie steht auf allen drei gestalteten Seiten, kommt aus einem einzigen
+# Teiltemplate (app/templates/urheber.html) und wurde vom Auftraggeber
+# ausdruecklich verlangt. Getestet wird deshalb nicht nur, DASS sie da ist,
+# sondern auch die drei Eigenschaften, die still wegbrechen koennen, ohne
+# dass eine Seite dabei kaputt aussieht.
+
+URHEBER_SEITEN = ["/", "/vertippt"]
+
+
+@pytest.mark.parametrize("pfad", URHEBER_SEITEN)
+def test_seite_traegt_die_urheberzeile(pfad):
+    text = TestClient(app).get(pfad).text
+    assert "Bastian Strauss, Varel" in text
+    assert "2026" in text
+    assert "https://bastianstrauss.digital" in text
+
+
+@pytest.mark.parametrize("pfad", URHEBER_SEITEN)
+def test_urheberzeile_oeffnet_in_einem_neuen_tab(pfad):
+    """Sonst verliert ein Kind mitten im Durchlauf seinen Fortschritt.
+
+    Die Lernseite speichert nichts: Wer sie waehrend eines Durchlaufs
+    verlaesst, faengt danach von vorn an. Ein versehentlicher Griff auf
+    den Verweis darf deshalb nicht im selben Tab landen - und sobald
+    target="_blank" gesetzt ist, gehoert rel="noopener" zwingend dazu.
+    """
+    text = TestClient(app).get(pfad).text
+    assert 'target="_blank"' in text
+    assert 'rel="noopener noreferrer"' in text
+
+
+@pytest.mark.parametrize("pfad", URHEBER_SEITEN)
+def test_urheberzeile_steht_innerhalb_der_buehne(pfad):
+    """Sonst bekommt jede Seite einen Scrollbalken, den sie vorher nicht hatte.
+
+    .buehne ist die Flexspalte mit min-height 100dvh. Ein Element
+    dahinter laege unterhalb des Schirms. Das faellt in keinem anderen
+    Test auf: Statuscode, Text und Klassen stimmen dann alle noch.
+    """
+    text = TestClient(app).get(pfad).text
+    assert text.rindex('class="urheber"') < text.rindex("</div>")

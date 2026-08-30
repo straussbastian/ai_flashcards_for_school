@@ -275,3 +275,16 @@ vollständigen Chromium; das dauert einige Minuten.
 | `docs/praxistest-cowork.md` | Den MCP-Server mit Claude Cowork verbinden |
 | `docs/superpowers/specs/` | Design-Spec |
 | `docs/design/mockups/` | Freigegebene Entwürfe – Referenz für die Optik |
+| `LICENSE` | MIT |
+
+---
+
+## Lizenz
+
+[MIT](LICENSE) – © 2026 Bastian Strauss, Varel · [bastianstrauss.digital](https://bastianstrauss.digital)
+
+Benutzen, verändern, weitergeben, auch gewerblich: alles erlaubt. Die
+einzige Bedingung ist, dass der Copyright-Hinweis aus der Datei `LICENSE`
+in Kopien und abgeleiteten Werken stehen bleibt. Eine Schule, die dieses
+Repository nimmt und auf einem eigenen Server betreibt, muss niemanden
+fragen.
