@@ -2,7 +2,7 @@
 
 Massstab ist Abschnitt 5 der Spec. Zwei Saetze daraus tragen diese Datei:
 
-    "bundle_aendern | slug, optional titel, beschreibung, klasse,
+    "bundle_aendern | slug, optional titel, beschreibung, gruppe,
      selbsteinschaetzung, reihenfolge | aktualisiertes Bundle"
 
     "Kein endgueltiges Loeschen ueber MCP. bundle_deaktivieren setzt
@@ -59,10 +59,10 @@ async def _paket(**abweichungen) -> dict:
 
 
 async def test_aendern_ersetzt_nur_das_angegebene_feld(konfiguration, mcp_sitzung):
-    paket = await _paket(klasse="FS 23b")
+    paket = await _paket(gruppe="FS 23b")
     geaendert = await _aufrufen("bundle_aendern", slug=paket["slug"], titel="Netzwerke II")
     assert geaendert["titel"] == "Netzwerke II"
-    assert geaendert["klasse"] == "FS 23b"
+    assert geaendert["gruppe"] == "FS 23b"
     assert geaendert["url"] == f"{TEST_BASIS_URL}/{paket['slug']}"
 
 
@@ -81,13 +81,13 @@ async def test_alle_felder_lassen_sich_aendern(konfiguration, mcp_sitzung):
         slug=paket["slug"],
         titel="Netzwerke II",
         beschreibung="Zweiter Durchgang",
-        klasse="FS 24a",
+        gruppe="FS 24a",
         selbsteinschaetzung=False,
         reihenfolge="fest",
     )
     assert geaendert["titel"] == "Netzwerke II"
     assert geaendert["beschreibung"] == "Zweiter Durchgang"
-    assert geaendert["klasse"] == "FS 24a"
+    assert geaendert["gruppe"] == "FS 24a"
     assert geaendert["selbsteinschaetzung"] is False
     assert geaendert["reihenfolge"] == "fest"
 

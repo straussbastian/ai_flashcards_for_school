@@ -3,14 +3,14 @@
 Der einzige Ort, an dem entschieden wird, was ausgeliefert wird. Wichtig
 dabei: Nur `vorderseite`, `rueckseite`, `erklaerung` und `beschreibung`
 enthalten HTML, und dieses HTML kommt ausschliesslich aus `rendern()`.
-Antworttexte, Titel und Klasse bleiben Klartext - der Browser setzt sie
+Antworttexte, Titel und Gruppe bleiben Klartext - der Browser setzt sie
 als Text ein, nicht als HTML.
 
 Optionale Felder sind bei der Kartenart, zu der sie gehören, immer als
 String vorhanden und tragen bei Abwesenheit einen leeren String
-(`beschreibung`, `erklaerung`, `klasse`); eine Flashcard trägt gar kein
+(`beschreibung`, `erklaerung`, `gruppe`); eine Flashcard trägt gar kein
 Erklärungsfeld, weil das Datenbank-Constraint ihr keine Erklärung erlaubt.
-Das gewährleistet eine konsistente Prüfung im Browser: `if (bundle.klasse)`,
+Das gewährleistet eine konsistente Prüfung im Browser: `if (bundle.gruppe)`,
 `if (karte.erklaerung)` usw. funktionieren überall gleich, wo das Feld
 überhaupt vorkommt.
 """
@@ -36,7 +36,10 @@ def bauen(bundle: Bundle) -> dict:
     return {
         "titel": bundle.titel,
         "beschreibung": rendern(bundle.beschreibung),
-        "klasse": bundle.klasse or "",
+        "gruppe": bundle.gruppe or "",
+        # NULL heisst "alle Karten". Der Runner zieht sonst genau so viele
+        # zufaellig aus dem Paket (siehe app/static/runner.js, stichprobe).
+        "karten_pro_durchlauf": bundle.karten_pro_durchlauf,
         "selbsteinschaetzung": bundle.selbsteinschaetzung,
         "reihenfolge": bundle.reihenfolge,
         "anzahl": {

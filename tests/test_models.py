@@ -464,11 +464,11 @@ async def test_zu_langer_titel_wird_abgelehnt(session):
     assert _constraint_name(exc_info) == "ck_bundles_titel_max_laenge"
 
 
-async def test_zu_lange_klasse_wird_abgelehnt(session):
-    session.add(Bundle(slug="weisse-taube-fliegt", titel="Test", klasse="a" * 61))
+async def test_zu_lange_gruppe_wird_abgelehnt(session):
+    session.add(Bundle(slug="weisse-taube-fliegt", titel="Test", gruppe="a" * 61))
     with pytest.raises(IntegrityError) as exc_info:
         await session.flush()
-    assert _constraint_name(exc_info) == "ck_bundles_klasse_max_laenge"
+    assert _constraint_name(exc_info) == "ck_bundles_gruppe_max_laenge"
 
 
 # ---------------------------------------------------------------------------
@@ -590,3 +590,33 @@ async def test_doppelter_slug_wird_abgelehnt(session):
     with pytest.raises(IntegrityError) as exc_info:
         await session.flush()
     assert _constraint_name(exc_info) == "uq_bundles_slug"
+
+
+async def test_stichprobe_null_wird_abgelehnt(session):
+    """Die Null darf kein gespeicherter Wert sein.
+
+    Genau deshalb ist sie ueber MCP frei fuer ihre eigene Bedeutung
+    ("zuruecksetzen auf alle") - siehe app/mcp/karten.py,
+    karten_pro_durchlauf_pruefen.
+    """
+    session.add(Bundle(slug="leise-kanne-summt", titel="Test", karten_pro_durchlauf=0))
+    with pytest.raises(IntegrityError) as exc_info:
+        await session.flush()
+    assert _constraint_name(exc_info) == "ck_bundles_karten_pro_durchlauf_positiv"
+
+
+async def test_negative_stichprobe_wird_abgelehnt(session):
+    session.add(Bundle(slug="helle-nadel-tanzt", titel="Test", karten_pro_durchlauf=-1))
+    with pytest.raises(IntegrityError) as exc_info:
+        await session.flush()
+    assert _constraint_name(exc_info) == "ck_bundles_karten_pro_durchlauf_positiv"
+
+
+async def test_stichprobe_darf_groesser_sein_als_das_paket(session):
+    """Ausdruecklich kein Fehler: Ein zu grosser Wert heisst "alle".
+
+    Eine Pruefung gegen die Kartenzahl waere ohnehin nicht haltbar - Karten
+    kommen und gehen, der Wert am Paket bleibt.
+    """
+    session.add(Bundle(slug="warme-feder-blinkt", titel="Test", karten_pro_durchlauf=9999))
+    await session.flush()

@@ -57,12 +57,12 @@ def _keine_einschleusung(blatt, wo: str, sichtbar: list[str]) -> None:
     )
 
 
-def test_antworttext_titel_und_klasse_bleiben_klartext(seite, bundle, meldungen):
+def test_antworttext_titel_und_gruppe_bleiben_klartext(seite, bundle, meldungen):
     """Der ganze Weg: Startseite, Frage, Aufloesung, Ergebnis mit Fehlerliste."""
     url = bundle(
         [frage("Welche Antwort ist falsch?", ["Richtig ist harmlos", GIFT], 0)],
         titel=f"Titel {IMG} {SKRIPT}",
-        klasse=IMG,
+        gruppe=IMG,
     )
 
     # --- Startseite: Titel und Klasse ---

@@ -13,7 +13,7 @@ from app.mcp.fehler import MCPFehler
 from app.mcp.karten import (
     beschreibung_pruefen,
     karte_pruefen,
-    klasse_pruefen,
+    gruppe_pruefen,
     titel_pruefen,
 )
 
@@ -161,12 +161,12 @@ def test_titel_wird_beschnitten_und_geprueft():
     assert "200" in str(fehler.value)
 
 
-def test_klasse_ist_optional_und_begrenzt():
-    assert klasse_pruefen(None) is None
-    assert klasse_pruefen("   ") is None
-    assert klasse_pruefen("  FS 23b ") == "FS 23b"
+def test_gruppe_ist_optional_und_begrenzt():
+    assert gruppe_pruefen(None) is None
+    assert gruppe_pruefen("   ") is None
+    assert gruppe_pruefen("  FS 23b ") == "FS 23b"
     with pytest.raises(MCPFehler) as fehler:
-        klasse_pruefen("k" * 61)
+        gruppe_pruefen("k" * 61)
     assert "60" in str(fehler.value)
 
 

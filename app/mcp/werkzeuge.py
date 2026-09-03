@@ -52,7 +52,8 @@ def uebersicht(bundle: Bundle, anzahl_karten: int) -> dict:
         "url": url(bundle.slug),
         "titel": bundle.titel,
         "beschreibung": bundle.beschreibung or "",
-        "klasse": bundle.klasse or "",
+        "gruppe": bundle.gruppe or "",
+        "karten_pro_durchlauf": bundle.karten_pro_durchlauf,
         "selbsteinschaetzung": bundle.selbsteinschaetzung,
         "reihenfolge": bundle.reihenfolge,
         "aktiv": bundle.aktiv,
@@ -104,8 +105,13 @@ def registrieren(server: MCPServer) -> None:
         beschreibung: Annotated[
             str | None, Field(default=None, description="Optionaler Einleitungstext, Markdown.")
         ] = None,
-        klasse: Annotated[
-            str | None, Field(default=None, description="Optionale Klassenbezeichnung, z.B. 'FS 23b'.")
+        gruppe: Annotated[
+            str | None,
+            Field(default=None, description="Optionale Gruppe, z.B. 'Englisch' oder 'WBA3'."),
+        ] = None,
+        karten_pro_durchlauf: Annotated[
+            int | None,
+            Field(default=None, description="Wie viele Karten je Durchlauf abgefragt werden - sie werden zufällig aus dem Paket gezogen. Ohne Angabe: alle. 0 setzt auf alle zurück."),
         ] = None,
         selbsteinschaetzung: Annotated[
             bool,
@@ -123,8 +129,9 @@ def registrieren(server: MCPServer) -> None:
                 offene,
                 titel=titel,
                 beschreibung=beschreibung,
-                klasse=klasse,
+                gruppe=gruppe,
                 selbsteinschaetzung=selbsteinschaetzung,
+                karten_pro_durchlauf=karten_pro_durchlauf,
                 karten=karten,
             )
             antwort = uebersicht(bundle, len(bundle.karten))
@@ -133,16 +140,16 @@ def registrieren(server: MCPServer) -> None:
 
     @server.tool(
         description=(
-            "Listet die Lernpakete mit Adresse, Link, Titel, Klasse, "
+            "Listet die Lernpakete mit Adresse, Link, Titel, Gruppe, "
             "Kartenzahl und Zustand auf. Standardmäßig nur die aktiven - "
             "mit nur_aktive=false kommen die deaktivierten dazu."
         )
     )
     @als_werkzeug
     async def bundle_liste(
-        klasse: Annotated[
+        gruppe: Annotated[
             str | None,
-            Field(default=None, description="Nur Lernpakete dieser Klasse."),
+            Field(default=None, description="Nur Lernpakete dieser Gruppe."),
         ] = None,
         nur_aktive: Annotated[
             bool,
@@ -157,10 +164,16 @@ def registrieren(server: MCPServer) -> None:
     ) -> dict:
         async with sitzung() as offene:
             zeilen = await dienste.bundles_auflisten(
-                offene, klasse=klasse, nur_aktive=nur_aktive
+                offene, gruppe=gruppe, nur_aktive=nur_aktive
             )
+            # Welche Gruppen es schon gibt - damit beim naechsten Anlegen
+            # "WBA3" wiederverwendet wird und nicht "wba3" danebensteht. Ein
+            # Hinweis, kein Zwang: Es gibt bewusst keine Auswahlliste und
+            # keine Normalisierung.
+            vorhandene = sorted({b.gruppe for b, _ in zeilen if b.gruppe})
             return {
                 "anzahl": len(zeilen),
+                "vorhandene_gruppen": vorhandene,
                 "bundles": [uebersicht(bundle, anzahl) for bundle, anzahl in zeilen],
             }
 
@@ -198,9 +211,22 @@ def registrieren(server: MCPServer) -> None:
     async def karten_hinzufuegen(
         slug: Annotated[str, Field(description="Die Drei-Wort-Adresse des Lernpakets.")],
         karten: Annotated[list[KarteEingabe], Field(description="Die neuen Karten.")],
+        position: Annotated[
+            int | None,
+            Field(
+                default=None,
+                description=(
+                    "An welcher Stelle eingefügt wird. 0 ist die erste Karte; "
+                    "die Positionen stehen bei bundle_anzeigen. Ohne Angabe "
+                    "werden die Karten hinten angehängt."
+                ),
+            ),
+        ] = None,
     ) -> dict:
         async with sitzung() as offene:
-            bundle, neue = await dienste.karten_anhaengen(offene, slug=slug, karten=karten)
+            bundle, neue = await dienste.karten_einfuegen(
+                offene, slug=slug, karten=karten, position=position
+            )
             gesamt = await dienste.karten_zaehlen(offene, bundle.id)
             antwort = {
                 **uebersicht(bundle, gesamt),
@@ -298,9 +324,9 @@ def registrieren(server: MCPServer) -> None:
             str | None,
             Field(default=None, description="Neuer Einleitungstext. Leerer Text löscht ihn."),
         ] = None,
-        klasse: Annotated[
+        gruppe: Annotated[
             str | None,
-            Field(default=None, description="Neue Klassenbezeichnung. Leerer Text löscht sie."),
+            Field(default=None, description="Neue Gruppe. Leerer Text löscht sie."),
         ] = None,
         selbsteinschaetzung: Annotated[
             bool | None,
@@ -316,6 +342,10 @@ def registrieren(server: MCPServer) -> None:
                 ),
             ),
         ] = None,
+        karten_pro_durchlauf: Annotated[
+            int | None,
+            Field(default=None, description="Wie viele Karten je Durchlauf abgefragt werden - sie werden zufällig aus dem Paket gezogen. Ohne Angabe: alle. 0 setzt auf alle zurück."),
+        ] = None,
     ) -> dict:
         async with sitzung() as offene:
             bundle = await dienste.bundle_aendern(
@@ -323,9 +353,10 @@ def registrieren(server: MCPServer) -> None:
                 slug=slug,
                 titel=titel,
                 beschreibung=beschreibung,
-                klasse=klasse,
+                gruppe=gruppe,
                 selbsteinschaetzung=selbsteinschaetzung,
                 reihenfolge=reihenfolge,
+                karten_pro_durchlauf=karten_pro_durchlauf,
             )
             antwort = uebersicht(bundle, await dienste.karten_zaehlen(offene, bundle.id))
             await offene.commit()

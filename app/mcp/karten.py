@@ -14,7 +14,7 @@ Zwei Dinge geschehen hier, und beide sind in der Spec begruendet:
 from app.markdown import MarkdownZuLang, rendern
 from app.mcp.eingaben import KarteEingabe
 from app.mcp.fehler import MCPFehler, bei_karte
-from app.models import MAX_KLASSE_LAENGE, MAX_TITEL_LAENGE
+from app.models import MAX_GRUPPE_LAENGE, MAX_TITEL_LAENGE
 
 MIN_ANTWORTEN = 2
 MAX_ANTWORTEN = 4
@@ -197,17 +197,40 @@ def titel_pruefen(titel: str) -> str:
     return beschnitten
 
 
-def klasse_pruefen(klasse: str | None) -> str | None:
-    beschnitten = (klasse or "").strip()
+def gruppe_pruefen(gruppe: str | None) -> str | None:
+    beschnitten = (gruppe or "").strip()
     if not beschnitten:
         return None
-    if len(beschnitten) > MAX_KLASSE_LAENGE:
+    if len(beschnitten) > MAX_GRUPPE_LAENGE:
         raise MCPFehler(
-            f"Die Klassenbezeichnung ist mit {len(beschnitten)} Zeichen zu "
-            f"lang. Erlaubt sind {MAX_KLASSE_LAENGE} Zeichen, zum Beispiel "
-            "„FS 23b“."
+            f"Die Gruppe ist mit {len(beschnitten)} Zeichen zu lang. Erlaubt "
+            f"sind {MAX_GRUPPE_LAENGE} Zeichen, zum Beispiel „Englisch“ oder "
+            "„WBA3“."
         )
     return beschnitten
+
+
+def karten_pro_durchlauf_pruefen(anzahl: int | None) -> int | None:
+    """Prueft die Stichprobengroesse. 0 heisst "alle" und wird zu None.
+
+    Die Null traegt diese Bedeutung, weil es fuer eine Zahl kein Gegenstueck
+    zum leeren Text gibt, mit dem bundle_aendern sonst Felder loescht: None
+    heisst dort bereits "nicht angegeben". Ohne diese Festlegung liesse sich
+    ein einmal gesetzter Wert nie wieder aufheben. Kollidieren kann sie mit
+    nichts - als gespeicherter Wert lehnt der CHECK-Constraint die Null
+    ohnehin ab.
+    """
+    if anzahl is None:
+        return None
+    if anzahl == 0:
+        return None
+    if anzahl < 0:
+        raise MCPFehler(
+            f"'karten_pro_durchlauf' ist {anzahl} und damit negativ. Gib eine "
+            "Zahl groesser als null an - oder 0, wenn wieder alle Karten "
+            "abgefragt werden sollen."
+        )
+    return anzahl
 
 
 def beschreibung_pruefen(beschreibung: str | None) -> str | None:

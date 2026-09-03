@@ -176,8 +176,29 @@
      wie sie aus der Datenbank kommt (nach position sortiert, siehe
      app/bundle_json.py). Die Antworten werden laut Spec trotzdem bei
      jedem Durchlauf neu gemischt. */
-  const kartenFolge = (quelle) =>
-    BUNDLE.reihenfolge === "fest" ? quelle.slice() : mischen(quelle);
+  /* Zwei getrennte Entscheidungen, und ihre Reihenfolge ist der Kern:
+     erst WELCHE Karten, dann IN WELCHER FOLGE.
+
+     Andersherum - erst ordnen, dann "die ersten x" nehmen - ergaebe bei
+     reihenfolge "fest" bei jedem Aufruf DIESELBEN x Karten; der Rest des
+     Pakets kaeme nie dran. Bei einem Paket mit 203 Karten und x = 20 waeren
+     das 183 Karten, die niemand je zu sehen bekommt. */
+  const stichprobe = (quelle) => {
+    const x = BUNDLE.karten_pro_durchlauf;
+    // Ohne Angabe oder wenn das Paket kleiner ist als die Stichprobe: alles.
+    // Ein zu grosser Wert ist kein Fehler, sondern heisst "alle".
+    if (!x || x >= quelle.length) return quelle.slice();
+    return mischen(quelle).slice(0, x);
+  };
+
+  const kartenFolge = (quelle) => {
+    const gezogen = stichprobe(quelle);
+    return BUNDLE.reihenfolge === "fest"
+      // Nach der urspruenglichen Stelle im Paket sortieren: "fest" gilt fuer
+      // die ANZEIGE, nicht fuer die Auswahl.
+      ? gezogen.sort((a, b) => quelle.indexOf(a) - quelle.indexOf(b))
+      : mischen(gezogen);
+  };
 
   const durchlaufBauen = (quelle) => {
     const karten = kartenFolge(quelle).map((k) => {
@@ -375,10 +396,10 @@
     ansicht = "start";
     const s = seiteBauen();
 
-    // klasse und beschreibung sind optional und dann ein leerer String
+    // gruppe und beschreibung sind optional und dann ein leerer String
     // (siehe app/bundle_json.py). Ein leerer Chip und ein leerer Absatz
     // haetten auf der Startseite nichts zu suchen.
-    if (BUNDLE.klasse) s.append(knoten("span", "klasse", BUNDLE.klasse));
+    if (BUNDLE.gruppe) s.append(knoten("span", "klasse", BUNDLE.gruppe));
     s.append(knoten("h1", "titel", BUNDLE.titel));
     if (BUNDLE.beschreibung) {
       // HTML aus app/markdown.rendern(), dort gesaeubert. Siehe den
@@ -408,6 +429,16 @@
         zusammen.append(sp);
       });
     s.append(zusammen);
+
+    /* Ohne diesen Satz waere die Kopfzeile irrefuehrend: Sie zaehlt "Karte 3
+       von 20", die Zusammensetzung darueber nennt aber 203. Wer das nicht
+       zusammenbringt, haelt ein Paket fuer durchgearbeitet, von dem er ein
+       Zehntel gesehen hat. */
+    const x = BUNDLE.karten_pro_durchlauf;
+    if (x && x < BUNDLE.anzahl.gesamt) {
+      s.append(knoten("p", "hinweis",
+        `${x} davon je Durchlauf – bei jedem Start neu gezogen`));
+    }
 
     const start = knopf("knopf", null, "Los geht's →", () => starten(BUNDLE.karten));
     start.style.marginTop = "auto";

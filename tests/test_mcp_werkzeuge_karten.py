@@ -279,3 +279,94 @@ async def test_geloeschte_karte_ist_wirklich_fort(konfiguration, mcp_sitzung, se
         select(Karte).where(Karte.id == uuid.UUID(karte["karte_id"]))
     )
     assert gefunden is None
+
+
+# ===================== karten_hinzufuegen mit position =====================
+#
+# Ergaenzung zu Entscheidung E-5: Ohne "position" bleibt alles wie dort
+# beschrieben - angehaengt wird auf max(position) + 1, ohne dass eine
+# bestehende Zeile angefasst wird. MIT "position" ist ein Verschieben
+# unvermeidlich; das geschieht als EIN update() und ist damit genau das
+# Massen-update, das E-5 sonst vermeidet. Der Test unten haelt fest, was das
+# fuer geaendert_am bedeutet, damit es niemand raten muss.
+
+
+async def _positionen(sitzung, bundle_id) -> list[tuple[int, str]]:
+    zeilen = (await sitzung.execute(
+        select(Karte.position, Karte.vorderseite)
+        .where(Karte.bundle_id == bundle_id)
+        .order_by(Karte.position)
+    )).all()
+    return [(pos, vorn) for pos, vorn in zeilen]
+
+
+async def _paket_mit_drei(sitzung):
+    paket = await _aufrufen("bundle_anlegen", titel="Reihenfolge", karten=[
+        {**FLASHCARD, "vorderseite": "A"},
+        {**FLASHCARD, "vorderseite": "B"},
+        {**FLASHCARD, "vorderseite": "C"},
+    ])
+    bundle_id = await sitzung.scalar(
+        select(Karte.bundle_id).where(Karte.vorderseite == "A")
+    )
+    return paket, bundle_id
+
+
+async def test_ohne_position_wird_weiterhin_angehaengt(konfiguration, mcp_sitzung, session):
+    paket, bundle_id = await _paket_mit_drei(session)
+    await _aufrufen("karten_hinzufuegen", slug=paket["slug"],
+                    karten=[{**FLASHCARD, "vorderseite": "D"}])
+    assert [v for _, v in await _positionen(session, bundle_id)] == ["A", "B", "C", "D"]
+
+
+async def test_position_null_setzt_die_karte_ganz_nach_vorn(konfiguration, mcp_sitzung, session):
+    paket, bundle_id = await _paket_mit_drei(session)
+    await _aufrufen("karten_hinzufuegen", slug=paket["slug"], position=0,
+                    karten=[{**FLASHCARD, "vorderseite": "NEU"}])
+    assert [v for _, v in await _positionen(session, bundle_id)] == ["NEU", "A", "B", "C"]
+
+
+async def test_einfuegen_in_die_mitte(konfiguration, mcp_sitzung, session):
+    paket, bundle_id = await _paket_mit_drei(session)
+    await _aufrufen("karten_hinzufuegen", slug=paket["slug"], position=1,
+                    karten=[{**FLASHCARD, "vorderseite": "NEU"}])
+    assert [v for _, v in await _positionen(session, bundle_id)] == ["A", "NEU", "B", "C"]
+
+
+async def test_mehrere_karten_bleiben_in_ihrer_reihenfolge(konfiguration, mcp_sitzung, session):
+    paket, bundle_id = await _paket_mit_drei(session)
+    await _aufrufen("karten_hinzufuegen", slug=paket["slug"], position=1, karten=[
+        {**FLASHCARD, "vorderseite": "X"},
+        {**FLASHCARD, "vorderseite": "Y"},
+    ])
+    assert [v for _, v in await _positionen(session, bundle_id)] == ["A", "X", "Y", "B", "C"]
+
+
+async def test_positionen_bleiben_eindeutig_und_lueckenlos(konfiguration, mcp_sitzung, session):
+    """Das Verschieben darf keine Dopplung und keine Luecke hinterlassen.
+
+    Die Eindeutigkeit haelt schon uq_karten_bundle_position - aber erst beim
+    Commit, weil das Constraint DEFERRABLE ist. Waere das Verschieben falsch,
+    scheiterte es also nicht hier, sondern irgendwann spaeter.
+    """
+    paket, bundle_id = await _paket_mit_drei(session)
+    await _aufrufen("karten_hinzufuegen", slug=paket["slug"], position=1,
+                    karten=[{**FLASHCARD, "vorderseite": "NEU"}])
+    stellen = [pos for pos, _ in await _positionen(session, bundle_id)]
+    assert stellen == list(range(len(stellen))), f"Luecke oder Dopplung: {stellen}"
+
+
+async def test_position_hinter_der_letzten_karte_haengt_an(konfiguration, mcp_sitzung, session):
+    """Kein Fehler, sondern die naheliegende Auslegung von "dahinter"."""
+    paket, bundle_id = await _paket_mit_drei(session)
+    await _aufrufen("karten_hinzufuegen", slug=paket["slug"], position=99,
+                    karten=[{**FLASHCARD, "vorderseite": "D"}])
+    assert [v for _, v in await _positionen(session, bundle_id)] == ["A", "B", "C", "D"]
+
+
+async def test_negative_position_wird_abgelehnt(konfiguration, mcp_sitzung, session):
+    paket, _ = await _paket_mit_drei(session)
+    text = await _fehlertext("karten_hinzufuegen", slug=paket["slug"], position=-1,
+                             karten=[{**FLASHCARD, "vorderseite": "D"}])
+    assert "negativ" in text
+    assert "0" in text

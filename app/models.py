@@ -46,7 +46,7 @@ MAX_TITEL_LAENGE = 200
 
 # "FS 23b" laut Spec, Abschnitt 4. 60 Zeichen fassen auch eine ausgeschriebene
 # Klassenbezeichnung wie "Fachinformatiker Systemintegration 23b" bequem.
-MAX_KLASSE_LAENGE = 60
+MAX_GRUPPE_LAENGE = 60
 
 # --- Leerraum, den die Datenbank wie Python behandeln muss -----------------
 # btrim(x) ohne zweites Argument trimmt ausschliesslich das ASCII-Leerzeichen
@@ -96,7 +96,9 @@ class Bundle(Base):
     slug: Mapped[str] = mapped_column(String(120), nullable=False)
     titel: Mapped[str] = mapped_column(Text, nullable=False)
     beschreibung: Mapped[str | None] = mapped_column(Text)
-    klasse: Mapped[str | None] = mapped_column(Text)
+    # Frueher "klasse". Umbenannt, weil das Feld laengst allgemeiner
+    # benutzt wird: Es traegt Faecher ("Englisch") neben Klassen ("WBA3").
+    gruppe: Mapped[str | None] = mapped_column(Text)
     selbsteinschaetzung: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default="true"
     )
@@ -108,6 +110,8 @@ class Bundle(Base):
     reihenfolge: Mapped[str] = mapped_column(
         String(20), nullable=False, server_default="zufall"
     )
+    # Wie viele Karten ein Durchlauf abfragt. NULL = alle.
+    karten_pro_durchlauf: Mapped[int | None] = mapped_column(Integer)
     aktiv: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
     erstellt_am: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
@@ -167,8 +171,17 @@ class Bundle(Base):
             name="ck_bundles_beschreibung_nicht_leer",
         ),
         CheckConstraint(
-            f"length(klasse) <= {MAX_KLASSE_LAENGE}",
-            name="ck_bundles_klasse_max_laenge",
+            f"length(gruppe) <= {MAX_GRUPPE_LAENGE}",
+            name="ck_bundles_gruppe_max_laenge",
+        ),
+        # NULL heisst "alle Karten" und ist die Vorgabe - ohne diesen Wert
+        # verhaelt sich ein Lernpaket wie bisher. Bewusst keine Obergrenze:
+        # Ein Wert groesser als das Paket bedeutet "alle" (der Runner kuerzt)
+        # und ist kein Fehler. Die Null ist ausdruecklich NICHT erlaubt und
+        # bleibt dadurch frei fuer ihre Bedeutung ueber MCP: "zuruecksetzen".
+        CheckConstraint(
+            "karten_pro_durchlauf IS NULL OR karten_pro_durchlauf > 0",
+            name="ck_bundles_karten_pro_durchlauf_positiv",
         ),
     )
 

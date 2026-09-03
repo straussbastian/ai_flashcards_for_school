@@ -6,7 +6,7 @@ deutschem Klartext.
 
 import uuid
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,7 +15,8 @@ from app.mcp.fehler import MCPFehler
 from app.mcp.karten import (
     beschreibung_pruefen,
     karte_pruefen,
-    klasse_pruefen,
+    gruppe_pruefen,
+    karten_pro_durchlauf_pruefen,
     reihenfolge_pruefen,
     titel_pruefen,
 )
@@ -72,8 +73,9 @@ async def bundle_anlegen(
     sitzung: AsyncSession,
     titel: str,
     beschreibung: str | None,
-    klasse: str | None,
+    gruppe: str | None,
     selbsteinschaetzung: bool,
+    karten_pro_durchlauf: int | None,
     karten: list[KarteEingabe],
 ) -> Bundle:
     """Legt ein Lernpaket samt Karten an.
@@ -96,8 +98,9 @@ async def bundle_anlegen(
     felder = {
         "titel": titel_pruefen(titel),
         "beschreibung": beschreibung_pruefen(beschreibung),
-        "klasse": klasse_pruefen(klasse),
+        "gruppe": gruppe_pruefen(gruppe),
         "selbsteinschaetzung": selbsteinschaetzung,
+        "karten_pro_durchlauf": karten_pro_durchlauf_pruefen(karten_pro_durchlauf),
     }
 
     for _ in range(SLUG_VERSUCHE):
@@ -131,7 +134,7 @@ async def bundle_anlegen(
 
 
 async def bundles_auflisten(
-    sitzung: AsyncSession, klasse: str | None, nur_aktive: bool
+    sitzung: AsyncSession, gruppe: str | None, nur_aktive: bool
 ) -> list[tuple[Bundle, int]]:
     """Alle Lernpakete mit ihrer Kartenzahl, neueste zuerst."""
     abfrage = (
@@ -140,8 +143,8 @@ async def bundles_auflisten(
         .group_by(Bundle.id)
         .order_by(Bundle.erstellt_am.desc())
     )
-    if klasse:
-        abfrage = abfrage.where(Bundle.klasse == klasse.strip())
+    if gruppe:
+        abfrage = abfrage.where(Bundle.gruppe == gruppe.strip())
     if nur_aktive:
         abfrage = abfrage.where(Bundle.aktiv.is_(True))
     return [(bundle, anzahl) for bundle, anzahl in (await sitzung.execute(abfrage)).all()]
@@ -161,32 +164,48 @@ async def karten_zaehlen(sitzung: AsyncSession, bundle_id) -> int:
     )
 
 
-async def karten_anhaengen(
-    sitzung: AsyncSession, slug: str, karten: list[KarteEingabe]
+async def karten_einfuegen(
+    sitzung: AsyncSession,
+    slug: str,
+    karten: list[KarteEingabe],
+    position: int | None = None,
 ) -> tuple[Bundle, list[Karte]]:
-    """Haengt Karten hinten an ein bestehendes Lernpaket an.
+    """Fuegt Karten an einer Stelle ein - ohne Angabe hinten.
 
     Alles oder nichts, wie bei bundle_anlegen: Erst werden alle Karten
     geprueft, dann wird geschrieben. Eine halb angelegte Lieferung waere
     schlimmer als keine.
 
-    Die neue Position ist max(position) + 1 und ausdruecklich NICHT die
-    Anzahl der Karten (Entscheidung E-5). Nach dem Loeschen einer mittleren
-    Karte gibt es Luecken; "anzahl" traefe dann eine bereits vergebene
-    Position und liefe in uq_karten_bundle_position.
+    OHNE position wird angehaengt, und zwar auf max(position) + 1 und
+    ausdruecklich NICHT auf die Anzahl der Karten (Entscheidung E-5). Nach
+    dem Loeschen einer mittleren Karte gibt es Luecken; "anzahl" traefe dann
+    eine bereits vergebene Position und liefe in uq_karten_bundle_position.
+
+    MIT position ruecken die Karten ab dieser Stelle um die Anzahl der neuen
+    Karten nach hinten. Das geht nur, weil uq_karten_bundle_position als
+    DEFERRABLE INITIALLY DEFERRED angelegt ist: Waehrend des Verschiebens
+    gibt es zwangslaeufig kurz doppelte Positionen, geprueft wird erst beim
+    Commit. Ein einziges UPDATE statt einer Schleife - dann stellt sich die
+    Frage nach der Reihenfolge des Verschiebens gar nicht erst.
 
     Returns:
         Das Lernpaket und die neu angelegten Karten in der Reihenfolge der
         Uebergabe.
 
     Raises:
-        MCPFehler: Wenn es das Lernpaket nicht gibt oder eine Karte nicht
-            durch die Pruefung kommt.
+        MCPFehler: Wenn es das Lernpaket nicht gibt, eine Karte nicht durch
+            die Pruefung kommt oder position negativ ist.
     """
     if not karten:
         raise MCPFehler(
             "Es wurden keine Karten übergeben. Bitte gib mindestens eine "
             "Karte an."
+        )
+    if position is not None and position < 0:
+        raise MCPFehler(
+            f"'position' ist {position} und damit negativ. Die erste Stelle "
+            "ist 0. Lass die Angabe weg, wenn die Karten hinten angehängt "
+            "werden sollen."
         )
     bundle = await bundle_holen(sitzung, slug)
     geprueft = [karte_pruefen(eine, nummer) for nummer, eine in enumerate(karten, start=1)]
@@ -196,8 +215,22 @@ async def karten_anhaengen(
     )
     naechste = 0 if hoechste is None else hoechste + 1
 
+    if position is None or position >= naechste:
+        # Ans Ende - auch bei einer Position hinter der letzten Karte. Das
+        # ist kein Fehler, sondern die naheliegende Auslegung von "dahinter".
+        beginn = naechste
+    else:
+        beginn = position
+        # Platz schaffen. Ein UPDATE fuer alle betroffenen Karten; die
+        # Eindeutigkeit wird erst beim Commit geprueft (siehe Docstring).
+        await sitzung.execute(
+            update(Karte)
+            .where(Karte.bundle_id == bundle.id, Karte.position >= beginn)
+            .values(position=Karte.position + len(geprueft))
+        )
+
     neue = [
-        Karte(bundle_id=bundle.id, position=naechste + abstand, **werte)
+        Karte(bundle_id=bundle.id, position=beginn + abstand, **werte)
         for abstand, werte in enumerate(geprueft)
     ]
     sitzung.add_all(neue)
@@ -337,9 +370,10 @@ async def bundle_aendern(
     slug: str,
     titel: str | None,
     beschreibung: str | None,
-    klasse: str | None,
+    gruppe: str | None,
     selbsteinschaetzung: bool | None,
     reihenfolge: str | None,
+    karten_pro_durchlauf: int | None,
 ) -> Bundle:
     """Aendert die Kopfdaten eines Lernpakets.
 
@@ -357,14 +391,15 @@ async def bundle_aendern(
     angegeben = {
         "titel": titel,
         "beschreibung": beschreibung,
-        "klasse": klasse,
+        "gruppe": gruppe,
         "selbsteinschaetzung": selbsteinschaetzung,
         "reihenfolge": reihenfolge,
+        "karten_pro_durchlauf": karten_pro_durchlauf,
     }
     if all(wert is None for wert in angegeben.values()):
         raise MCPFehler(
             "Es wurde kein Feld zum Ändern angegeben. Bitte gib an, was sich "
-            "ändern soll – zum Beispiel 'titel' oder 'klasse'. Mit "
+            "ändern soll – zum Beispiel 'titel' oder 'gruppe'. Mit "
             "bundle_anzeigen siehst du den aktuellen Stand."
         )
 
@@ -374,12 +409,14 @@ async def bundle_aendern(
         bundle.titel = titel_pruefen(titel)
     if beschreibung is not None:
         bundle.beschreibung = beschreibung_pruefen(beschreibung)
-    if klasse is not None:
-        bundle.klasse = klasse_pruefen(klasse)
+    if gruppe is not None:
+        bundle.gruppe = gruppe_pruefen(gruppe)
     if selbsteinschaetzung is not None:
         bundle.selbsteinschaetzung = selbsteinschaetzung
     if reihenfolge is not None:
         bundle.reihenfolge = reihenfolge_pruefen(reihenfolge)
+    if karten_pro_durchlauf is not None:
+        bundle.karten_pro_durchlauf = karten_pro_durchlauf_pruefen(karten_pro_durchlauf)
 
     await sitzung.flush()
     return bundle

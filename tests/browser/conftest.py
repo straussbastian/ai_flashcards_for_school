@@ -227,15 +227,16 @@ def bundle(motor, server: str):
     angelegt: list[str] = []
 
     def anlegen(karten: list[dict], titel: str = "Arbeitsrecht kompakt",
-                beschreibung: str = "", klasse: str = "",
+                beschreibung: str = "", gruppe: str = "",
                 selbsteinschaetzung: bool = True, reihenfolge: str = "zufall",
-                aktiv: bool = True) -> str:
+                aktiv: bool = True, karten_pro_durchlauf: int | None = None) -> str:
         slug = _zufallsslug()
         with Session(motor) as sitzung:
             eintrag = Bundle(
                 slug=slug, titel=titel, beschreibung=beschreibung or None,
-                klasse=klasse or None, selbsteinschaetzung=selbsteinschaetzung,
+                gruppe=gruppe or None, selbsteinschaetzung=selbsteinschaetzung,
                 reihenfolge=reihenfolge, aktiv=aktiv,
+                karten_pro_durchlauf=karten_pro_durchlauf,
             )
             sitzung.add(eintrag)
             sitzung.flush()

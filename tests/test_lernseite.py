@@ -7,7 +7,7 @@ from app.models import Bundle, Karte
 
 async def _bundle_anlegen(session, slug="kluge-tafel-leuchtet", aktiv=True, mit_karten=True):
     bundle = Bundle(slug=slug, titel="Arbeitsrecht kompakt", aktiv=aktiv,
-                    klasse="FS 23b", beschreibung="Erst lernen, dann fragen.")
+                    gruppe="FS 23b", beschreibung="Erst lernen, dann fragen.")
     session.add(bundle)
     await session.flush()
     if mit_karten:

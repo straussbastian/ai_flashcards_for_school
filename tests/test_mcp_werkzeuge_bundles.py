@@ -66,7 +66,7 @@ async def test_anlegen_liefert_slug_url_und_anzahl(konfiguration, mcp_sitzung):
     daten = await _aufrufen(
         "bundle_anlegen",
         titel="Netzwerkgrundlagen",
-        klasse="FS 23b",
+        gruppe="FS 23b",
         karten=[FLASHCARD, FRAGE],
     )
     assert daten["slug"].count("-") == 2
@@ -150,23 +150,23 @@ async def test_wenn_gar_nichts_frei_ist_kommt_eine_klartextmeldung(
 
 
 async def test_liste_zeigt_slug_url_und_kartenzahl(konfiguration, mcp_sitzung):
-    await _aufrufen("bundle_anlegen", titel="Eins", klasse="FS 23b", karten=[FLASHCARD])
-    await _aufrufen("bundle_anlegen", titel="Zwei", klasse="EL 24a", karten=[FRAGE, FLASHCARD])
+    await _aufrufen("bundle_anlegen", titel="Eins", gruppe="FS 23b", karten=[FLASHCARD])
+    await _aufrufen("bundle_anlegen", titel="Zwei", gruppe="EL 24a", karten=[FRAGE, FLASHCARD])
 
     daten = await _aufrufen("bundle_liste")
     assert daten["anzahl"] == 2
     nach_titel = {eintrag["titel"]: eintrag for eintrag in daten["bundles"]}
     assert nach_titel["Zwei"]["anzahl_karten"] == 2
-    assert nach_titel["Eins"]["klasse"] == "FS 23b"
+    assert nach_titel["Eins"]["gruppe"] == "FS 23b"
     assert nach_titel["Eins"]["url"].startswith(TEST_BASIS_URL)
     assert nach_titel["Eins"]["aktiv"] is True
 
 
-async def test_liste_laesst_sich_nach_klasse_filtern(konfiguration, mcp_sitzung):
-    await _aufrufen("bundle_anlegen", titel="Eins", klasse="FS 23b", karten=[FLASHCARD])
-    await _aufrufen("bundle_anlegen", titel="Zwei", klasse="EL 24a", karten=[FLASHCARD])
+async def test_liste_laesst_sich_nach_gruppe_filtern(konfiguration, mcp_sitzung):
+    await _aufrufen("bundle_anlegen", titel="Eins", gruppe="FS 23b", karten=[FLASHCARD])
+    await _aufrufen("bundle_anlegen", titel="Zwei", gruppe="EL 24a", karten=[FLASHCARD])
 
-    daten = await _aufrufen("bundle_liste", klasse="FS 23b")
+    daten = await _aufrufen("bundle_liste", gruppe="FS 23b")
     assert [eintrag["titel"] for eintrag in daten["bundles"]] == ["Eins"]
 
 
@@ -214,3 +214,55 @@ async def test_alle_acht_werkzeuge_sind_da(konfiguration):
     server, _ = mcp_bauen()
     namen = {eines.name for eines in await server.list_tools()}
     assert {"bundle_anlegen", "bundle_liste", "bundle_anzeigen"} <= namen
+
+
+# ====================== Stichprobe und vorhandene Gruppen ======================
+
+
+async def test_karten_pro_durchlauf_wird_gesetzt_und_ausgegeben(konfiguration, mcp_sitzung):
+    daten = await _aufrufen(
+        "bundle_anlegen", titel="Vokabeln", karten=[FLASHCARD], karten_pro_durchlauf=20
+    )
+    assert daten["karten_pro_durchlauf"] == 20
+
+
+async def test_ohne_angabe_bleibt_karten_pro_durchlauf_leer(konfiguration, mcp_sitzung):
+    daten = await _aufrufen("bundle_anlegen", titel="Vokabeln", karten=[FLASHCARD])
+    assert daten["karten_pro_durchlauf"] is None
+
+
+async def test_null_setzt_karten_pro_durchlauf_wieder_auf_alle(konfiguration, mcp_sitzung):
+    """Die Null ist der einzige Weg zurueck.
+
+    Fuer eine Zahl gibt es kein Gegenstueck zum leeren Text, mit dem
+    bundle_aendern sonst Felder loescht: None heisst dort bereits "nicht
+    angegeben". Ohne diese Festlegung liesse sich ein einmal gesetzter Wert
+    nie wieder aufheben.
+    """
+    angelegt = await _aufrufen(
+        "bundle_anlegen", titel="Vokabeln", karten=[FLASHCARD], karten_pro_durchlauf=20
+    )
+    geaendert = await _aufrufen(
+        "bundle_aendern", slug=angelegt["slug"], karten_pro_durchlauf=0
+    )
+    assert geaendert["karten_pro_durchlauf"] is None
+
+
+async def test_negative_stichprobe_wird_abgelehnt(konfiguration, mcp_sitzung):
+    with pytest.raises(Exception) as fehler:
+        await _aufrufen(
+            "bundle_anlegen", titel="Vokabeln", karten=[FLASHCARD], karten_pro_durchlauf=-5
+        )
+    assert "negativ" in str(fehler.value)
+
+
+async def test_liste_nennt_die_vorhandenen_gruppen(konfiguration, mcp_sitzung):
+    """Damit der Agent 'WBA3' wiederverwendet und nicht 'wba3' danebenschreibt."""
+    await _aufrufen("bundle_anlegen", titel="Eins", gruppe="WBA3", karten=[FLASHCARD])
+    await _aufrufen("bundle_anlegen", titel="Zwei", gruppe="Englisch", karten=[FLASHCARD])
+    await _aufrufen("bundle_anlegen", titel="Drei", gruppe="WBA3", karten=[FLASHCARD])
+    await _aufrufen("bundle_anlegen", titel="Vier", karten=[FLASHCARD])   # ohne Gruppe
+
+    daten = await _aufrufen("bundle_liste")
+    # Sortiert, ohne Dopplung, und die leere Gruppe steht nicht darin.
+    assert daten["vorhandene_gruppen"] == ["Englisch", "WBA3"]

@@ -58,8 +58,8 @@ def test_startseite_bindet_das_stylesheet_ein():
 def test_startseite_steht_auf_der_tafel():
     """Die Klassen, an denen die Optik der Lernseite haengt."""
     text = TestClient(app).get("/").text
-    for klasse in ('class="buehne knapp"', 'class="stapel"', 'class="seite"'):
-        assert klasse in text
+    for gruppe in ('class="buehne knapp"', 'class="stapel"', 'class="seite"'):
+        assert gruppe in text
 
 
 def test_startseite_hat_kein_eingabefeld():
@@ -96,8 +96,8 @@ def test_404_seite_bindet_das_stylesheet_ein(pfad):
 
 def test_404_seite_steht_auf_der_tafel():
     text = TestClient(app).get("/vertippt").text
-    for klasse in ('class="buehne knapp"', 'class="stapel"', 'class="titel"'):
-        assert klasse in text
+    for gruppe in ('class="buehne knapp"', 'class="stapel"', 'class="titel"'):
+        assert gruppe in text
 
 
 async def _inaktives_bundle(session, slug="stille-tafel-ruht"):

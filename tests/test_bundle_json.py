@@ -4,7 +4,7 @@ from app.models import Bundle, Karte
 
 def _bundle(**abweichungen) -> Bundle:
     werte = dict(slug="kluge-tafel-leuchtet", titel="Arbeitsrecht kompakt",
-                 beschreibung=None, klasse=None, selbsteinschaetzung=True,
+                 beschreibung=None, gruppe=None, selbsteinschaetzung=True,
                  reihenfolge="zufall")
     werte.update(abweichungen)
     bundle = Bundle(**werte)
@@ -23,10 +23,10 @@ def _frage(position: int, frage: str, antworten: list[str], index: int,
 
 
 def test_kopfdaten_wandern_unveraendert_durch():
-    bundle = _bundle(klasse="FS 23b")
+    bundle = _bundle(gruppe="FS 23b")
     ergebnis = bauen(bundle)
     assert ergebnis["titel"] == "Arbeitsrecht kompakt"
-    assert ergebnis["klasse"] == "FS 23b"
+    assert ergebnis["gruppe"] == "FS 23b"
     assert ergebnis["selbsteinschaetzung"] is True
     assert ergebnis["reihenfolge"] == "zufall"
 
@@ -93,10 +93,10 @@ def test_leere_beschreibung_wird_leerer_string():
     assert ergebnis["beschreibung"] == ""
 
 
-def test_klasse_none_wird_leerer_string():
-    bundle = _bundle(klasse=None)
+def test_gruppe_none_wird_leerer_string():
+    bundle = _bundle(gruppe=None)
     ergebnis = bauen(bundle)
-    assert ergebnis["klasse"] == ""
+    assert ergebnis["gruppe"] == ""
 
 
 def test_anzahl_bei_bundle_ohne_karten():
@@ -104,3 +104,14 @@ def test_anzahl_bei_bundle_ohne_karten():
     bundle.karten = []
     ergebnis = bauen(bundle)
     assert ergebnis["anzahl"] == {"gesamt": 0, "flashcards": 0, "fragen": 0}
+
+
+def test_stichprobe_geht_an_den_browser():
+    bundle = _bundle(karten_pro_durchlauf=20)
+    assert bauen(bundle)["karten_pro_durchlauf"] == 20
+
+
+def test_ohne_stichprobe_steht_none_im_json():
+    """None und nicht 0: Der Runner prueft mit "if (!x)" auf beides, aber
+    eine 0 im JSON hiesse "null Karten" und waere irrefuehrend zu lesen."""
+    assert bauen(_bundle())["karten_pro_durchlauf"] is None
