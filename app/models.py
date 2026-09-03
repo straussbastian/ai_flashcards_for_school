@@ -81,6 +81,44 @@ _LEERRAUM_SQL = "' ' || chr(9) || chr(10) || chr(13) || chr(11) || chr(12) || ch
 # optionalen Spalten brauchen deshalb kein zusaetzliches "IS NULL OR".
 
 
+class Adresse(Base):
+    """Der gemeinsame Adressraum von Lernpaketen und Sammlungen.
+
+    Beide bekommen dieselbe Form von Drei-Wort-Adresse, und beide werden
+    unter /{slug} ausgeliefert. Ohne diese Tabelle teilten sich zwei
+    Tabellen einen Namensraum, ohne dass irgendetwas die Eindeutigkeit
+    erzwingt: Keine Datenbank kann einen Unique-Constraint ueber zwei
+    Tabellen spannen. Ein Wettlauf beim Anlegen ergaebe zwei Zeilen mit
+    derselben Adresse, und die Route lieferte still aus, was sie zuerst
+    findet - bei einer Anwendung, deren gesamte Zugangssicherung die
+    unerratbare Adresse ist, waere das der schlimmste denkbare Fehler.
+
+    Hier ist der Slug der Primaerschluessel. Damit garantiert die Datenbank
+    selbst, dass es jede Adresse genau einmal gibt.
+
+    Das geht nur auf, weil in dieser Anwendung nichts je geloescht wird: Es
+    gibt kein bundle_loeschen, nur bundle_deaktivieren. Eine Adresse wird
+    also nie frei, und es braucht kein Aufraeumen verwaister Eintraege. Wer
+    hier spaeter ein echtes Loeschen einfuehrt, muss diese Tabelle
+    mitdenken.
+    """
+
+    __tablename__ = "adressen"
+
+    slug: Mapped[str] = mapped_column(String(120), primary_key=True)
+    # Wofuer die Adresse vergeben ist. Die Route entscheidet daran, ob sie
+    # ein Lernpaket oder eine Sammlung ausliefert - ohne beide Tabellen
+    # nacheinander fragen zu muessen.
+    art: Mapped[str] = mapped_column(String(20), nullable=False)
+
+    __table_args__ = (
+        CheckConstraint(
+            "art IN ('paket', 'sammlung')",
+            name="ck_adressen_art",
+        ),
+    )
+
+
 class Bundle(Base):
     """Eine Lernseite unter einer Drei-Wort-Adresse."""
 
@@ -93,7 +131,13 @@ class Bundle(Base):
     # lassen - der explizite Name "uq_bundles_slug" in __table_args__ unten
     # sorgt dafuer, dass ein spaeteres DROP CONSTRAINT oder SET CONSTRAINTS
     # nicht raten muss, wie alle anderen Constraints dieses Modells auch.
-    slug: Mapped[str] = mapped_column(String(120), nullable=False)
+    # Fremdschluessel auf adressen: Der gemeinsame Adressraum wird dort
+    # erzwungen, nicht hier (siehe Adresse oben). Der Unique-Constraint
+    # uq_bundles_slug bleibt trotzdem stehen - er sagt zusaetzlich, dass
+    # eine Adresse nicht zweimal AN LERNPAKETE vergeben sein kann.
+    slug: Mapped[str] = mapped_column(
+        String(120), ForeignKey("adressen.slug"), nullable=False
+    )
     titel: Mapped[str] = mapped_column(Text, nullable=False)
     beschreibung: Mapped[str | None] = mapped_column(Text)
     # Frueher "klasse". Umbenannt, weil das Feld laengst allgemeiner
@@ -419,4 +463,108 @@ class Karte(Base):
             """,
             name="ck_karten_richtige_index_im_bereich",
         ),
+    )
+
+
+class Sammlung(Base):
+    """Ein Buendel von Lernpaketen unter einer eigenen Drei-Wort-Adresse.
+
+    Der Zweck ist ein einziger: der Lehrkraft EINEN Link geben statt
+    dreizehn. Eine Sammlung ist eine Seite fuer die Lernenden - im
+    Unterschied zu "gruppe", das der Lehrkraft beim Wiederfinden hilft und
+    in bundle_liste gefiltert wird. Beide loesen verschiedene Probleme fuer
+    verschiedene Leute; keines ersetzt das andere.
+    """
+
+    __tablename__ = "sammlungen"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    # Wie bei Bundle: Fremdschluessel auf den gemeinsamen Adressraum.
+    slug: Mapped[str] = mapped_column(
+        String(120), ForeignKey("adressen.slug"), nullable=False
+    )
+    titel: Mapped[str] = mapped_column(Text, nullable=False)
+    beschreibung: Mapped[str | None] = mapped_column(Text)
+    gruppe: Mapped[str | None] = mapped_column(Text)
+    aktiv: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
+    erstellt_am: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    geaendert_am: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    zuordnungen: Mapped[list["SammlungPaket"]] = relationship(
+        back_populates="sammlung",
+        cascade="all, delete-orphan",
+        order_by="SammlungPaket.position",
+    )
+
+    __table_args__ = (
+        UniqueConstraint("slug", name="uq_sammlungen_slug"),
+        CheckConstraint(
+            f"length(btrim(titel, {_LEERRAUM_SQL})) > 0",
+            name="ck_sammlungen_titel_nicht_leer",
+        ),
+        CheckConstraint(
+            f"length(titel) <= {MAX_TITEL_LAENGE}",
+            name="ck_sammlungen_titel_max_laenge",
+        ),
+        CheckConstraint(
+            f"beschreibung IS NULL OR length(btrim(beschreibung, {_LEERRAUM_SQL})) > 0",
+            name="ck_sammlungen_beschreibung_nicht_leer",
+        ),
+        CheckConstraint(
+            f"length(beschreibung) <= {MAX_MARKDOWN_LAENGE}",
+            name="ck_sammlungen_beschreibung_max_laenge",
+        ),
+        CheckConstraint(
+            f"length(gruppe) <= {MAX_GRUPPE_LAENGE}",
+            name="ck_sammlungen_gruppe_max_laenge",
+        ),
+    )
+
+
+class SammlungPaket(Base):
+    """Welches Lernpaket an welcher Stelle in welcher Sammlung steht.
+
+    n:m und ausdruecklich nicht 1:n: Ein Lernpaket darf in mehreren
+    Sammlungen liegen - "Englisch 3" gleichzeitig in "Englisch komplett" und
+    in "Pruefung Januar", mit eigener Position in jeder. Der
+    Primaerschluessel verhindert nur dasselbe Paket ZWEIMAL IN DERSELBEN
+    Sammlung.
+
+    Genau daraus folgt die verschachtelte Adresse /sammlung/paket: Die
+    Zugehoerigkeit allein sagt nicht, wohin "zurueck" fuehrt, wenn ein Paket
+    zu mehreren Sammlungen gehoert. Erst der Weg dorthin sagt es.
+    """
+
+    __tablename__ = "sammlung_pakete"
+
+    sammlung_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("sammlungen.id", ondelete="CASCADE"), primary_key=True
+    )
+    bundle_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("bundles.id", ondelete="CASCADE"), primary_key=True, index=True
+    )
+    position: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    sammlung: Mapped[Sammlung] = relationship(back_populates="zuordnungen")
+    bundle: Mapped[Bundle] = relationship()
+
+    __table_args__ = (
+        # DEFERRABLE aus demselben Grund wie bei uq_karten_bundle_position:
+        # Umsortieren erzeugt zwangslaeufig kurzzeitig doppelte Positionen,
+        # geprueft wird erst beim Commit.
+        UniqueConstraint(
+            "sammlung_id", "position",
+            name="uq_sammlung_pakete_position",
+            deferrable=True, initially="DEFERRED",
+        ),
+        CheckConstraint("position >= 0", name="ck_sammlung_pakete_position_positiv"),
     )

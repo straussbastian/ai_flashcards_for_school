@@ -7,7 +7,6 @@ deutschem Klartext.
 import uuid
 
 from sqlalchemy import func, select, update
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.mcp.eingaben import KarteAenderung, KarteEingabe
@@ -22,14 +21,6 @@ from app.mcp.karten import (
 )
 from app.models import Bundle, Karte
 from app.slug import SlugKollision, freien_slug_finden
-
-# Drei Anlaeufe. freien_slug_finden() wuerfelt selbst schon bis zu zehnmal
-# und prueft dabei jedes Mal die Datenbank; diese Schleife hier faengt
-# ausschliesslich den Wettlauf ab - zwei gleichzeitige Aufrufe, die denselben
-# freien Kandidaten ziehen. Dass das dreimal hintereinander passiert, ist bei
-# einer Nutzerin ausgeschlossen.
-SLUG_VERSUCHE = 3
-
 
 async def bundle_holen(sitzung: AsyncSession, slug: str) -> Bundle:
     """Das Bundle zu einem Slug.
@@ -103,34 +94,28 @@ async def bundle_anlegen(
         "karten_pro_durchlauf": karten_pro_durchlauf_pruefen(karten_pro_durchlauf),
     }
 
-    for _ in range(SLUG_VERSUCHE):
-        slug = await freien_slug_finden(sitzung)
-        bundle = Bundle(slug=slug, **felder)
-        bundle.karten = [
-            Karte(position=stelle, **werte) for stelle, werte in enumerate(geprueft)
-        ]
-        try:
-            # begin_nested() setzt einen SAVEPOINT. Schlaegt der Einfuegevorgang
-            # am Unique-Constraint fehl, wird nur bis dorthin zurueckgerollt und
-            # die Sitzung bleibt benutzbar - ein Rollback der ganzen Transaktion
-            # wuerde alles verwerfen, was vorher geschah.
-            async with sitzung.begin_nested():
-                sitzung.add(bundle)
-                await sitzung.flush()
-        except IntegrityError as fehler:
-            if "uq_bundles_slug" not in str(fehler.orig):
-                raise
-            # Der Wettlauf aus Spec, Abschnitt 4: Zwischen "ist frei" und
-            # "ist eingetragen" hat ein zweiter Aufruf denselben Kandidaten
-            # gezogen. Das ist kein Fehler, den die Lehrerin lesen soll,
-            # sondern ein Signal, noch einmal zu wuerfeln.
-            continue
-        return bundle
-
-    raise MCPFehler(
-        "Es konnte keine freie Drei-Wort-Adresse gefunden werden. Bitte "
-        "versuche es noch einmal."
-    )
+    # Der Wettlauf um eine Adresse wird nicht mehr hier abgefangen.
+    # freien_slug_finden() traegt die Adresse gleich in adressen ein und
+    # wuerfelt selbst weiter, wenn ein anderer Aufruf schneller war - Pruefen
+    # und Belegen sind dort ein Schritt. Frueher stand hier eine eigene
+    # Wiederholschleife mit SAVEPOINT, weil zwischen "ist frei" und "ist
+    # eingetragen" eine Luecke lag; die gibt es nicht mehr.
+    # SlugKollision ist ein RuntimeError und traegt zwar schon deutschen
+    # Klartext, ist aber kein MCPFehler - ohne diese Umhuellung saehe die
+    # Lehrerin nur "Error executing tool bundle_anlegen". Nachgemessen: Genau
+    # das passierte, als die fruehere Wiederholschleife hier wegfiel, und ein
+    # Test hat es gefangen.
+    try:
+        slug = await freien_slug_finden(sitzung, art="paket")
+    except SlugKollision as fehler:
+        raise MCPFehler(str(fehler)) from fehler
+    bundle = Bundle(slug=slug, **felder)
+    bundle.karten = [
+        Karte(position=stelle, **werte) for stelle, werte in enumerate(geprueft)
+    ]
+    sitzung.add(bundle)
+    await sitzung.flush()
+    return bundle
 
 
 async def bundles_auflisten(

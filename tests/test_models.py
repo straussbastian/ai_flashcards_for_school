@@ -3,7 +3,8 @@ from sqlalchemy import insert, text
 from sqlalchemy.exc import IntegrityError
 
 from app.markdown import MAX_LAENGE
-from app.models import Bundle, Karte
+from app.models import Adresse, Bundle, Karte
+from tests.conftest import mit_adresse
 
 
 def _constraint_name(exc_info: pytest.ExceptionInfo) -> str | None:
@@ -21,8 +22,8 @@ def _constraint_name(exc_info: pytest.ExceptionInfo) -> str | None:
 
 
 async def _bundle(session) -> Bundle:
-    bundle = Bundle(slug="rote-katze-springt", titel="Hauptstaedte Europas")
-    session.add(bundle)
+    bundle = mit_adresse(
+        session, Bundle(slug="rote-katze-springt", titel="Hauptstaedte Europas"))
     await session.flush()
     return bundle
 
@@ -272,7 +273,7 @@ async def test_bundle_mit_leerem_titel_wird_abgelehnt(session, leerer_wert):
     btrim - in ck_karten_antworten_nicht_leer; ein Test je Spalte waere hier
     zu viel.
     """
-    session.add(Bundle(slug="gruene-eule-liest", titel=leerer_wert))
+    mit_adresse(session, Bundle(slug="gruene-eule-liest", titel=leerer_wert))
     with pytest.raises(IntegrityError) as exc_info:
         await session.flush()
     assert _constraint_name(exc_info) == "ck_bundles_titel_nicht_leer"
@@ -287,13 +288,13 @@ async def test_bundle_mit_titel_aus_umschliessendem_nbsp_und_echtem_inhalt_wird_
     muss weiterhin durchgehen - sonst waere der Constraint schlicht zu streng
     geworden, was schlimmer waere als die Luecke, die er schliesst.
     """
-    session.add(Bundle(slug="orange-fisch-schwimmt", titel="\u00a0Zagreb\u00a0"))
+    mit_adresse(session, Bundle(slug="orange-fisch-schwimmt", titel="\u00a0Zagreb\u00a0"))
     await session.flush()
 
 
 @pytest.mark.parametrize("leerer_wert", ["", "   "], ids=["leerstring", "nur_leerzeichen"])
 async def test_bundle_mit_leerem_slug_wird_abgelehnt(session, leerer_wert):
-    session.add(Bundle(slug=leerer_wert, titel="Test"))
+    mit_adresse(session, Bundle(slug=leerer_wert, titel="Test"))
     with pytest.raises(IntegrityError) as exc_info:
         await session.flush()
     assert _constraint_name(exc_info) == "ck_bundles_slug_nicht_leer"
@@ -324,7 +325,7 @@ async def test_doppelte_position_im_selben_bundle_wird_abgelehnt(session):
 
 
 async def test_unbekannte_reihenfolge_wird_abgelehnt(session):
-    session.add(Bundle(slug="blaue-ampel-tanzt", titel="Test", reihenfolge="rueckwaerts"))
+    mit_adresse(session, Bundle(slug="blaue-ampel-tanzt", titel="Test", reihenfolge="rueckwaerts"))
     with pytest.raises(IntegrityError) as exc_info:
         await session.flush()
     assert _constraint_name(exc_info) == "ck_bundles_reihenfolge"
@@ -423,7 +424,8 @@ async def test_zu_lange_erklaerung_wird_abgelehnt(session):
 
 
 async def test_zu_lange_beschreibung_wird_abgelehnt(session):
-    session.add(
+    mit_adresse(
+        session,
         Bundle(
             slug="gelbe-lampe-summt",
             titel="Test",
@@ -443,8 +445,8 @@ async def test_bundle_mit_leerer_beschreibung_wird_abgelehnt(session, leerer_wer
     ck_karten_erklaerung_nicht_leer oben - beschreibung zieht hier nach,
     damit eine gesetzte, aber inhaltslose Beschreibung nicht mehr durchgeht.
     """
-    session.add(
-        Bundle(slug="lila-frosch-huepft", titel="Test", beschreibung=leerer_wert)
+    mit_adresse(
+        session, Bundle(slug="lila-frosch-huepft", titel="Test", beschreibung=leerer_wert)
     )
     with pytest.raises(IntegrityError) as exc_info:
         await session.flush()
@@ -453,19 +455,19 @@ async def test_bundle_mit_leerer_beschreibung_wird_abgelehnt(session, leerer_wer
 
 async def test_bundle_ohne_beschreibung_laesst_sich_weiterhin_speichern(session):
     """Gegenprobe: beschreibung bleibt optional, NULL ist weiterhin erlaubt."""
-    session.add(Bundle(slug="tuerkise-schnecke-kriecht", titel="Test"))
+    mit_adresse(session, Bundle(slug="tuerkise-schnecke-kriecht", titel="Test"))
     await session.flush()
 
 
 async def test_zu_langer_titel_wird_abgelehnt(session):
-    session.add(Bundle(slug="graue-maus-pfeift", titel="a" * 201))
+    mit_adresse(session, Bundle(slug="graue-maus-pfeift", titel="a" * 201))
     with pytest.raises(IntegrityError) as exc_info:
         await session.flush()
     assert _constraint_name(exc_info) == "ck_bundles_titel_max_laenge"
 
 
 async def test_zu_lange_gruppe_wird_abgelehnt(session):
-    session.add(Bundle(slug="weisse-taube-fliegt", titel="Test", gruppe="a" * 61))
+    mit_adresse(session, Bundle(slug="weisse-taube-fliegt", titel="Test", gruppe="a" * 61))
     with pytest.raises(IntegrityError) as exc_info:
         await session.flush()
     assert _constraint_name(exc_info) == "ck_bundles_gruppe_max_laenge"
@@ -584,12 +586,38 @@ async def test_doppelter_slug_wird_abgelehnt(session):
     sonst kaeme eine Kollision unter Last still durch und zwei Lernseiten
     laegen unter derselben Adresse.
     """
+    # Die Adresse nur EINMAL eintragen: Sonst schluege schon der
+    # Primaerschluessel von "adressen" zu, und dieser Test kaeme gar nicht
+    # mehr bis zu dem Constraint, den er pruefen will.
+    session.add(Adresse(slug="rote-katze-springt", art="paket"))
     session.add(Bundle(slug="rote-katze-springt", titel="Erstes Bundle"))
     await session.flush()
     session.add(Bundle(slug="rote-katze-springt", titel="Zweites Bundle"))
     with pytest.raises(IntegrityError) as exc_info:
         await session.flush()
     assert _constraint_name(exc_info) == "uq_bundles_slug"
+
+
+async def test_dieselbe_adresse_kann_nicht_zweimal_vergeben_werden(session):
+    """Der Schutz, den kein Unique-Constraint ueber zwei Tabellen leisten kann.
+
+    Lernpakete und Sammlungen teilen sich einen Adressraum. Waere er nicht
+    in einer eigenen Tabelle gefuehrt, koennte ein Wettlauf zwei Zeilen mit
+    derselben Adresse erzeugen - und /{slug} lieferte still aus, was es
+    zuerst findet.
+    """
+    session.add(Adresse(slug="kluge-tafel-leuchtet", art="paket"))
+    await session.flush()
+    session.add(Adresse(slug="kluge-tafel-leuchtet", art="sammlung"))
+    with pytest.raises(IntegrityError):
+        await session.flush()
+
+
+async def test_ein_lernpaket_ohne_adresse_wird_abgelehnt(session):
+    """Die Adresse ist keine Beigabe, sondern Bedingung."""
+    session.add(Bundle(slug="nie-eingetragene-adresse", titel="Ohne Adresse"))
+    with pytest.raises(IntegrityError):
+        await session.flush()
 
 
 async def test_stichprobe_null_wird_abgelehnt(session):
@@ -599,14 +627,14 @@ async def test_stichprobe_null_wird_abgelehnt(session):
     ("zuruecksetzen auf alle") - siehe app/mcp/karten.py,
     karten_pro_durchlauf_pruefen.
     """
-    session.add(Bundle(slug="leise-kanne-summt", titel="Test", karten_pro_durchlauf=0))
+    mit_adresse(session, Bundle(slug="leise-kanne-summt", titel="Test", karten_pro_durchlauf=0))
     with pytest.raises(IntegrityError) as exc_info:
         await session.flush()
     assert _constraint_name(exc_info) == "ck_bundles_karten_pro_durchlauf_positiv"
 
 
 async def test_negative_stichprobe_wird_abgelehnt(session):
-    session.add(Bundle(slug="helle-nadel-tanzt", titel="Test", karten_pro_durchlauf=-1))
+    mit_adresse(session, Bundle(slug="helle-nadel-tanzt", titel="Test", karten_pro_durchlauf=-1))
     with pytest.raises(IntegrityError) as exc_info:
         await session.flush()
     assert _constraint_name(exc_info) == "ck_bundles_karten_pro_durchlauf_positiv"
@@ -618,5 +646,5 @@ async def test_stichprobe_darf_groesser_sein_als_das_paket(session):
     Eine Pruefung gegen die Kartenzahl waere ohnehin nicht haltbar - Karten
     kommen und gehen, der Wert am Paket bleibt.
     """
-    session.add(Bundle(slug="warme-feder-blinkt", titel="Test", karten_pro_durchlauf=9999))
+    mit_adresse(session, Bundle(slug="warme-feder-blinkt", titel="Test", karten_pro_durchlauf=9999))
     await session.flush()

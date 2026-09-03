@@ -3,12 +3,13 @@ import pytest
 from app.db import get_session
 from app.main import app
 from app.models import Bundle, Karte
+from tests.conftest import mit_adresse
 
 
 async def _bundle_anlegen(session, slug="kluge-tafel-leuchtet", aktiv=True, mit_karten=True):
-    bundle = Bundle(slug=slug, titel="Arbeitsrecht kompakt", aktiv=aktiv,
-                    gruppe="FS 23b", beschreibung="Erst lernen, dann fragen.")
-    session.add(bundle)
+    bundle = mit_adresse(session, Bundle(
+        slug=slug, titel="Arbeitsrecht kompakt", aktiv=aktiv,
+        gruppe="FS 23b", beschreibung="Erst lernen, dann fragen."))
     await session.flush()
     if mit_karten:
         session.add(Karte(bundle_id=bundle.id, position=1, art="flashcard",

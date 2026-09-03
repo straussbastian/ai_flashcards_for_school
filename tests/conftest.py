@@ -247,3 +247,23 @@ async def mcp_laeuft():
     beenden.set()
     await aufgabe
     mcp_bauen.cache_clear()
+
+
+def mit_adresse(sitzung, eintrag, art: str = "paket"):
+    """Traegt ein Lernpaket oder eine Sammlung samt seiner Adresse ein.
+
+    Seit es die Tabelle "adressen" gibt, kann ein Lernpaket nicht mehr
+    ohne sie bestehen - bundles.slug ist ein Fremdschluessel darauf. Im
+    Betrieb erledigt das freien_slug_finden(), das die Adresse gleich
+    reserviert. Tests, die ein Lernpaket mit einer selbst gewaehlten
+    Adresse anlegen, gehen daran vorbei und muessen sie selbst eintragen.
+
+    Bewusst ein Helfer und kein automatischer Haken am Modell: Ein
+    Lernpaket ohne Adresse SOLL scheitern. Wuerde die Adresse still
+    nachgetragen, faende ein Fehler, der genau das versaeumt, nie statt.
+    """
+    from app.models import Adresse
+
+    sitzung.add(Adresse(slug=eintrag.slug, art=art))
+    sitzung.add(eintrag)
+    return eintrag

@@ -21,6 +21,7 @@ from fastapi.testclient import TestClient
 from app.main import app
 from app.models import Bundle
 from app.oauth.redirect import CLAUDE_RUECKSPRUNG
+from tests.conftest import mit_adresse
 
 STYLESHEET = "/static/lernseite.css"
 
@@ -101,8 +102,7 @@ def test_404_seite_steht_auf_der_tafel():
 
 
 async def _inaktives_bundle(session, slug="stille-tafel-ruht"):
-    bundle = Bundle(slug=slug, titel="Stillgelegt", aktiv=False)
-    session.add(bundle)
+    bundle = mit_adresse(session, Bundle(slug=slug, titel="Stillgelegt", aktiv=False))
     await session.flush()
     return bundle
 

@@ -14,7 +14,7 @@ from sqlalchemy import select
 
 from app.mcp import mcp_bauen
 from app.models import Bundle
-from tests.conftest import TEST_BASIS_URL
+from tests.conftest import mit_adresse, TEST_BASIS_URL
 
 FLASHCARD = {"art": "flashcard", "vorderseite": "OSI-Schicht 3", "rueckseite": "Vermittlungsschicht"}
 FRAGE = {
@@ -103,46 +103,32 @@ async def test_eine_kaputte_karte_verhindert_das_ganze_bundle(konfiguration, mcp
     assert anzahl == 0
 
 
-async def test_ein_belegter_slug_wird_neu_gewuerfelt(konfiguration, mcp_sitzung, monkeypatch):
-    """Der Wettlauf aus Spec, Abschnitt 4.
-
-    freien_slug_finden() prueft und schreibt nicht atomar: Zwischen "ist
-    frei" und "ist eingetragen" kann ein zweiter Aufruf denselben Kandidaten
-    ziehen. Aufgefangen wird das vom Unique-Constraint - und das Anlegen muss
-    daraufhin NEU WUERFELN statt der Lehrerin einen IntegrityError
-    vorzulegen.
-
-    Nachgestellt wird der Wettlauf, indem freien_slug_finden zuerst einen
-    Slug liefert, der schon vergeben ist.
-    """
-    from app.mcp import dienste
-
-    mcp_sitzung.add(Bundle(slug="schon-vergeben-adresse", titel="Da"))
-    await mcp_sitzung.flush()
-
-    kandidaten = iter(["schon-vergeben-adresse", "frisch-gewuerfelte-adresse"])
-
-    async def gefaelscht(sitzung, versuche=10):
-        return next(kandidaten)
-
-    monkeypatch.setattr(dienste, "freien_slug_finden", gefaelscht)
-
-    daten = await _aufrufen("bundle_anlegen", titel="Zweites", karten=[FLASHCARD])
-    assert daten["slug"] == "frisch-gewuerfelte-adresse"
-
-
 async def test_wenn_gar_nichts_frei_ist_kommt_eine_klartextmeldung(
     konfiguration, mcp_sitzung, monkeypatch
 ):
+    """Eine erschoepfte Adresssuche muss die Lehrerin im Klartext erreichen.
+
+    Das Neuwuerfeln selbst steht nicht mehr hier: Seit freien_slug_finden()
+    die Adresse gleich in "adressen" eintraegt, sind Pruefen und Belegen ein
+    Schritt, und der Wettlauf wird dort abgefangen (siehe
+    tests/test_slug.py). Uebrig bleibt fuer diese Ebene genau eine Frage -
+    kommt die Meldung als Klartext an oder als "Error executing tool"?
+
+    Die Frage ist nicht theoretisch: SlugKollision ist ein RuntimeError und
+    kein MCPFehler. Als die fruehere Wiederholschleife in bundle_anlegen
+    wegfiel, entwischte sie ungehuellt, und die Lehrerin saehe nur noch
+    "Error executing tool bundle_anlegen". Dieser Test hat es gefangen.
+    """
     from app.mcp import dienste
+    from app.slug import SlugKollision
 
-    mcp_sitzung.add(Bundle(slug="immer-dieselbe-adresse", titel="Da"))
-    await mcp_sitzung.flush()
+    async def nichts_frei(sitzung, art="paket", versuche=10):
+        raise SlugKollision(
+            "Es konnte keine freie Drei-Wort-Adresse gefunden werden. "
+            "Bitte versuche es noch einmal oder melde dich beim Betreiber der Seite."
+        )
 
-    async def immer_dieselbe(sitzung, versuche=10):
-        return "immer-dieselbe-adresse"
-
-    monkeypatch.setattr(dienste, "freien_slug_finden", immer_dieselbe)
+    monkeypatch.setattr(dienste, "freien_slug_finden", nichts_frei)
 
     text = await _fehlertext("bundle_anlegen", titel="Dritte", karten=[FLASHCARD])
     assert "keine freie" in text.lower()
