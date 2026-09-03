@@ -22,22 +22,30 @@ from fastapi.testclient import TestClient
 
 from app.db import get_session
 from app.main import app
-from app.models import Bundle
+from app.models import Adresse, Bundle
 
 
 class _MitVorbereitetemBundle:
-    """Session-Ersatz, der jede Abfrage mit einem fertigen Bundle beantwortet.
+    """Session-Ersatz, der die Lernseite ohne Datenbank bedient.
 
-    Erspart eine echte Datenbank: Die Lernseite fragt genau einmal
-    session.scalar(...) nach dem Bundle zum Slug - dieses Objekt liefert es
-    direkt zurueck, ohne dass je eine Verbindung aufgebaut wird.
+    Erspart eine echte Datenbank: Die Route fragt nacheinander nach der
+    Adresse und nach dem Lernpaket dazu - dieses Objekt liefert beides
+    direkt, ohne dass je eine Verbindung aufgebaut wird.
+
+    Zwei Antworten und nicht mehr eine: Seit Lernpakete und Sammlungen sich
+    einen Adressraum teilen, fragt die Route erst "was liegt unter dieser
+    Adresse?" und dann erst die passende Tabelle. Die Attrappe muss das
+    nachbilden, sonst bekaeme die erste Frage ein Bundle als Antwort.
     """
 
     def __init__(self, bundle: Bundle) -> None:
         self._bundle = bundle
+        self._antworten = iter(
+            [Adresse(slug=bundle.slug, art="paket"), bundle]
+        )
 
     async def scalar(self, *args, **kwargs):
-        return self._bundle
+        return next(self._antworten)
 
 
 def _lernseite_bundle() -> Bundle:

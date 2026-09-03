@@ -1,0 +1,49 @@
+{% extends "basis.html" %}
+{% block titel %}{{ sammlung.titel }}{% endblock %}
+{% block kopf %}<link rel="stylesheet" href="/static/lernseite.css">{% endblock %}
+{% block inhalt %}
+{# Bewusst ohne JavaScript. Diese Seite ist eine Liste von Links - der
+   Runner (app/static/runner.js) hat hier nichts zu tun, und was ohne ihn
+   auskommt, soll auch ohne ihn auskommen.
+
+   Aufbau und Klassen stammen von der Lernseite (buehne, mitte, stapel,
+   karte, seite), damit die Sammlung als dieselbe Anwendung zu erkennen ist.
+   Kein Geist-Stapel dahinter: den zeigt auch die Lernseite erst waehrend
+   eines Durchlaufs. #}
+<div class="buehne">
+  <main class="mitte">
+    <div class="stapel">
+      <div class="karte"><div class="karte-innen">
+        <div class="seite">
+          {% if sammlung.gruppe %}<span class="klasse">{{ sammlung.gruppe }}</span>{% endif %}
+          <h1 class="titel">{{ sammlung.titel }}</h1>
+          {% if beschreibung_html %}
+          {# HTML aus app/markdown.rendern(), dort gesaeubert - dieselbe
+             Verteidigungslinie wie bei den vier Markdown-Feldern der
+             Lernseite. #}
+          <div class="beschreibung markdown">{{ beschreibung_html | safe }}</div>
+          {% endif %}
+
+          {% if pakete %}
+          <div class="antworten">
+            {% for paket in pakete %}
+            {# Die verschachtelte Adresse: das Lernpaket IM Kontext dieser
+               Sammlung. Nur so weiss die Lernseite danach, wohin "zurueck"
+               fuehrt und was das naechste Paket ist. #}
+            <a class="antwort" href="/{{ sammlung.slug }}/{{ paket.slug }}">
+              <span class="taste">{{ loop.index }}</span>{{ paket.titel }}
+            </a>
+            {% endfor %}
+          </div>
+          <span class="hinweis">{{ pakete | length }} Lernseiten</span>
+          {% else %}
+          <p class="hinweis">Diese Sammlung hat noch keine Lernseiten.</p>
+          {% endif %}
+        </div>
+      </div></div>
+    </div>
+  </main>
+
+  <p class="fussnote">Es wird nichts gespeichert: Neu laden hei&szlig;t neu anfangen.</p>
+</div>
+{% endblock %}

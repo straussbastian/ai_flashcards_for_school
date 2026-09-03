@@ -6,7 +6,7 @@ deutschem Klartext.
 
 import uuid
 
-from sqlalchemy import func, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.mcp.eingaben import KarteAenderung, KarteEingabe
@@ -19,7 +19,7 @@ from app.mcp.karten import (
     reihenfolge_pruefen,
     titel_pruefen,
 )
-from app.models import Bundle, Karte
+from app.models import Bundle, Karte, Sammlung, SammlungPaket
 from app.slug import SlugKollision, freien_slug_finden
 
 async def bundle_holen(sitzung: AsyncSession, slug: str) -> Bundle:
@@ -422,3 +422,174 @@ async def bundle_umschalten(sitzung: AsyncSession, slug: str, aktiv: bool) -> Bu
     bundle.aktiv = aktiv
     await sitzung.flush()
     return bundle
+
+
+# ====================== Sammlungen ======================
+
+
+async def sammlung_holen(sitzung: AsyncSession, slug: str) -> Sammlung:
+    """Die Sammlung zu einer Adresse.
+
+    Raises:
+        MCPFehler: Wenn es keine gibt.
+    """
+    eintrag = await sitzung.scalar(select(Sammlung).where(Sammlung.slug == slug))
+    if eintrag is None:
+        raise MCPFehler(
+            f"Eine Sammlung mit der Adresse „{slug}“ gibt es nicht. Mit "
+            "sammlung_liste siehst du alle vorhandenen."
+        )
+    return eintrag
+
+
+async def _pakete_zuordnen(
+    sitzung: AsyncSession, sammlung: Sammlung, slugs: list[str]
+) -> list[Bundle]:
+    """Ersetzt die Paketliste einer Sammlung vollstaendig.
+
+    Ein Werkzeug statt dreier (hinzufuegen/entfernen/verschieben): Der Agent
+    liest mit sammlung_anzeigen, ordnet und schreibt zurueck. Das haelt die
+    Werkzeugliste kurz - und jedes zusaetzliche Werkzeug ist eines, bei dem
+    danebengegriffen werden kann.
+
+    Eine leere Liste ist erlaubt und leert die Sammlung.
+
+    Raises:
+        MCPFehler: Bei einer unbekannten Adresse oder einer Dopplung.
+    """
+    beschnitten = [eintrag.strip() for eintrag in slugs]
+
+    doppelt = sorted({s for s in beschnitten if beschnitten.count(s) > 1})
+    if doppelt:
+        raise MCPFehler(
+            f"Diese Lernpakete stehen mehrfach in der Liste: {', '.join(doppelt)}. "
+            "Ein Lernpaket kann in einer Sammlung nur an einer Stelle stehen."
+        )
+
+    gefunden: list[Bundle] = []
+    for adresse in beschnitten:
+        paket = await sitzung.scalar(select(Bundle).where(Bundle.slug == adresse))
+        if paket is None:
+            raise MCPFehler(
+                f"Ein Lernpaket mit der Adresse „{adresse}“ gibt es nicht. Mit "
+                "bundle_liste siehst du alle vorhandenen."
+            )
+        gefunden.append(paket)
+
+    # Erst alles weg, dann neu setzen. Das Constraint auf (sammlung_id,
+    # position) ist DEFERRABLE, doppelte Positionen zwischendurch sind also
+    # unbedenklich - geprueft wird beim Commit.
+    await sitzung.execute(
+        delete(SammlungPaket).where(SammlungPaket.sammlung_id == sammlung.id)
+    )
+    for stelle, paket in enumerate(gefunden):
+        sitzung.add(
+            SammlungPaket(sammlung_id=sammlung.id, bundle_id=paket.id, position=stelle)
+        )
+    await sitzung.flush()
+    sitzung.expire(sammlung, ["zuordnungen"])
+    return gefunden
+
+
+async def sammlung_anlegen(
+    sitzung: AsyncSession,
+    titel: str,
+    beschreibung: str | None,
+    gruppe: str | None,
+    pakete: list[str] | None,
+) -> Sammlung:
+    """Legt eine Sammlung an, optional gleich mit ihren Lernpaketen."""
+    try:
+        slug = await freien_slug_finden(sitzung, art="sammlung")
+    except SlugKollision as fehler:
+        raise MCPFehler(str(fehler)) from fehler
+
+    sammlung = Sammlung(
+        slug=slug,
+        titel=titel_pruefen(titel),
+        beschreibung=beschreibung_pruefen(beschreibung),
+        gruppe=gruppe_pruefen(gruppe),
+    )
+    sitzung.add(sammlung)
+    await sitzung.flush()
+
+    if pakete:
+        await _pakete_zuordnen(sitzung, sammlung, pakete)
+    return sammlung
+
+
+async def sammlungen_auflisten(
+    sitzung: AsyncSession, gruppe: str | None, nur_aktive: bool
+) -> list[tuple[Sammlung, int]]:
+    """Alle Sammlungen mit ihrer Paketzahl, neueste zuerst."""
+    abfrage = (
+        select(Sammlung, func.count(SammlungPaket.bundle_id))
+        .outerjoin(SammlungPaket, SammlungPaket.sammlung_id == Sammlung.id)
+        .group_by(Sammlung.id)
+        .order_by(Sammlung.erstellt_am.desc())
+    )
+    if gruppe:
+        abfrage = abfrage.where(Sammlung.gruppe == gruppe.strip())
+    if nur_aktive:
+        abfrage = abfrage.where(Sammlung.aktiv.is_(True))
+    return [(eine, anzahl) for eine, anzahl in (await sitzung.execute(abfrage)).all()]
+
+
+async def sammlung_pakete(sitzung: AsyncSession, sammlung: Sammlung) -> list[Bundle]:
+    """Die Lernpakete einer Sammlung in ihrer Reihenfolge.
+
+    Deaktivierte Lernpakete bleiben draussen - eine Sammlung soll nichts
+    anbieten, was hinter dem Link ohnehin nicht mehr da ist.
+    """
+    zeilen = await sitzung.scalars(
+        select(Bundle)
+        .join(SammlungPaket, SammlungPaket.bundle_id == Bundle.id)
+        .where(SammlungPaket.sammlung_id == sammlung.id, Bundle.aktiv.is_(True))
+        .order_by(SammlungPaket.position)
+    )
+    return list(zeilen)
+
+
+async def sammlung_aendern(
+    sitzung: AsyncSession,
+    slug: str,
+    titel: str | None,
+    beschreibung: str | None,
+    gruppe: str | None,
+) -> Sammlung:
+    """Aendert die Kopfdaten einer Sammlung. Die Adresse bleibt unangetastet."""
+    angegeben = {"titel": titel, "beschreibung": beschreibung, "gruppe": gruppe}
+    if all(wert is None for wert in angegeben.values()):
+        raise MCPFehler(
+            "Es wurde kein Feld zum Ändern angegeben. Bitte gib an, was sich "
+            "ändern soll – zum Beispiel 'titel' oder 'gruppe'. Mit "
+            "sammlung_anzeigen siehst du den aktuellen Stand."
+        )
+    sammlung = await sammlung_holen(sitzung, slug)
+    if titel is not None:
+        sammlung.titel = titel_pruefen(titel)
+    if beschreibung is not None:
+        sammlung.beschreibung = beschreibung_pruefen(beschreibung)
+    if gruppe is not None:
+        sammlung.gruppe = gruppe_pruefen(gruppe)
+    await sitzung.flush()
+    return sammlung
+
+
+async def sammlung_pakete_setzen(
+    sitzung: AsyncSession, slug: str, pakete: list[str]
+) -> tuple[Sammlung, list[Bundle]]:
+    """Ersetzt die Paketliste einer Sammlung durch die uebergebene."""
+    sammlung = await sammlung_holen(sitzung, slug)
+    gefunden = await _pakete_zuordnen(sitzung, sammlung, pakete)
+    return sammlung, gefunden
+
+
+async def sammlung_umschalten(
+    sitzung: AsyncSession, slug: str, aktiv: bool
+) -> Sammlung:
+    """Schaltet eine Sammlung sichtbar oder unsichtbar."""
+    sammlung = await sammlung_holen(sitzung, slug)
+    sammlung.aktiv = aktiv
+    await sitzung.flush()
+    return sammlung

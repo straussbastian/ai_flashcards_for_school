@@ -280,6 +280,19 @@ body::before {
 .antwort:disabled { cursor: default; }
 .antwort:focus-visible { outline: 3px solid var(--tinte); outline-offset: 2px; }
 
+/* Manche dieser Kaesten sind ein LINK und kein Knopf: auf der
+   Sammlungsseite die Lernpakete, auf dem Ergebnisbildschirm "weiter" und
+   "zurueck zur Sammlung". Ein <a> bringt zwei Voreinstellungen mit, die ein
+   <button> nicht hat - eine Unterstreichung und die Linkfarbe des Browsers.
+   Nur die Unterstreichung wird abgeschaltet, NICHT die Farbe: .antwort und
+   .knopf setzen ihre eigene, und eine Autorenregel schlaegt die Linkfarbe
+   des Browsers ohnehin. Ein zusaetzliches "color: inherit" hier waere
+   spezifischer als .knopf und ueberschriebe dessen helles Gelb mit der
+   dunklen Kartentinte - der Text stuende dann dunkel auf dunkel. Genau das
+   ist beim ersten Anlauf passiert. */
+a.antwort, a.knopf { text-decoration: none; }
+a.knopf { text-align: center; }
+
 .taste {
   flex: none;
   width: 1.4rem;

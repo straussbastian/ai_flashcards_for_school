@@ -8,7 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bundle_json import bauen
 from app.db import get_session
-from app.models import Bundle
+from app.models import Adresse, Bundle, Sammlung, SammlungPaket
+from app.markdown import rendern as markdown_rendern
 from app.templates import rendern
 
 router = APIRouter()
@@ -88,24 +89,121 @@ def _einbetten(daten: dict) -> str:
     )
 
 
+def _stillgelegt(request: Request) -> HTMLResponse:
+    return rendern(request, "fehler.html", status_code=410,
+                   ueberschrift="Diese Lernseite ist nicht mehr aktiv",
+                   text="Deine Lehrkraft hat sie stillgelegt.")
+
+
+async def _pakete_der_sammlung(session: AsyncSession, sammlung: Sammlung) -> list[Bundle]:
+    """Die aktiven Lernpakete einer Sammlung in ihrer Reihenfolge."""
+    zeilen = await session.scalars(
+        select(Bundle)
+        .join(SammlungPaket, SammlungPaket.bundle_id == Bundle.id)
+        .where(SammlungPaket.sammlung_id == sammlung.id, Bundle.aktiv.is_(True))
+        .order_by(SammlungPaket.position)
+    )
+    return list(zeilen)
+
+
+# Diese Route MUSS vor /{slug} stehen: Starlette nimmt die erste passende,
+# und ein einzelnes /{slug} wuerde eine zweisegmentige Adresse ohnehin nicht
+# fangen - aber die Reihenfolge festzuhalten erspart der naechsten Aenderung
+# eine Suche.
+@router.get("/{sammlung_slug}/{paket_slug}", response_class=HTMLResponse)
+async def lernseite_in_sammlung(
+    request: Request,
+    sammlung_slug: str,
+    paket_slug: str,
+    session: AsyncSession = Depends(get_session),
+) -> HTMLResponse:
+    """Ein Lernpaket im Kontext einer Sammlung.
+
+    Der Kontext steht in der Adresse und nicht in den Daten, weil ein
+    Lernpaket zu MEHREREN Sammlungen gehoeren kann (n:m). Aus der
+    Zugehoerigkeit allein liesse sich nicht ableiten, wohin "zurueck" fuehrt
+    und was das naechste Paket ist - aus dem Weg hierher schon.
+    """
+    if not (re.fullmatch(ADRESSE, sammlung_slug) and re.fullmatch(ADRESSE, paket_slug)):
+        return _nicht_gefunden(request)
+
+    sammlung = await session.scalar(
+        select(Sammlung).where(Sammlung.slug == sammlung_slug)
+    )
+    if sammlung is None:
+        return _nicht_gefunden(request)
+    if not sammlung.aktiv:
+        return _stillgelegt(request)
+
+    pakete = await _pakete_der_sammlung(session, sammlung)
+    stelle = next((i for i, p in enumerate(pakete) if p.slug == paket_slug), None)
+    if stelle is None:
+        # Das Paket gibt es nicht, es ist stillgelegt, oder es gehoert nicht
+        # zu dieser Sammlung. Alle drei enden hier als 404 - und der letzte
+        # Fall ausdruecklich NICHT als stillschweigend ausgeliefertes Paket
+        # ohne Kontext: Eine erfundene Kombination ist ein Irrtum und soll
+        # als solcher erscheinen.
+        return _nicht_gefunden(request)
+
+    bundle = pakete[stelle]
+    naechstes = pakete[stelle + 1] if stelle + 1 < len(pakete) else None
+
+    daten = bauen(bundle)
+    daten["sammlung"] = {
+        "titel": sammlung.titel,
+        "url": f"/{sammlung.slug}",
+        "naechstes": (
+            {"titel": naechstes.titel, "url": f"/{sammlung.slug}/{naechstes.slug}"}
+            if naechstes else None
+        ),
+    }
+    return rendern(request, "lernseite.html", bundle=daten, daten=_einbetten(daten))
+
+
 @router.get("/{slug}", response_class=HTMLResponse)
 async def lernseite(
     request: Request,
     slug: str,
     session: AsyncSession = Depends(get_session),
 ) -> HTMLResponse:
+    """Ein Lernpaket ODER eine Sammlung - die Adresstabelle entscheidet.
+
+    Beide teilen sich einen Adressraum (siehe app/models.py, Adresse), und
+    "art" sagt, was unter dieser Adresse liegt. Damit muss nicht erst die
+    eine und dann die andere Tabelle gefragt werden.
+    """
     if not re.fullmatch(ADRESSE, slug):
         return _nicht_gefunden(request)
 
-    bundle = await session.scalar(select(Bundle).where(Bundle.slug == slug))
-
-    if bundle is None:
+    # select(...) + scalar() statt session.get(): Diese Datei fragt ueberall
+    # so, und tests/test_sicherheit.py reicht eine Attrappe herein, die genau
+    # diese eine Methode kennt. Einheitlich zu bleiben ist hier billiger, als
+    # die Attrappe zu erweitern.
+    adresse = await session.scalar(select(Adresse).where(Adresse.slug == slug))
+    if adresse is None:
         return _nicht_gefunden(request)
 
+    if adresse.art == "sammlung":
+        sammlung = await session.scalar(select(Sammlung).where(Sammlung.slug == slug))
+        if sammlung is None:
+            return _nicht_gefunden(request)
+        if not sammlung.aktiv:
+            return _stillgelegt(request)
+        return rendern(
+            request, "sammlung.html",
+            sammlung=sammlung,
+            # Durch rendern() aus app/markdown.py, wie jedes andere
+            # Markdown-Feld: markdown-it rendert, nh3 saeubert. Das Template
+            # setzt es mit |safe ein und darf das nur deshalb.
+            beschreibung_html=markdown_rendern(sammlung.beschreibung or ""),
+            pakete=await _pakete_der_sammlung(session, sammlung),
+        )
+
+    bundle = await session.scalar(select(Bundle).where(Bundle.slug == slug))
+    if bundle is None:
+        return _nicht_gefunden(request)
     if not bundle.aktiv:
-        return rendern(request, "fehler.html", status_code=410,
-                       ueberschrift="Diese Lernseite ist nicht mehr aktiv",
-                       text="Deine Lehrkraft hat sie stillgelegt.")
+        return _stillgelegt(request)
 
     daten = bauen(bundle)
     return rendern(request, "lernseite.html", bundle=daten, daten=_einbetten(daten))

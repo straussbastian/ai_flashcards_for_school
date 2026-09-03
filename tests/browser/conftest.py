@@ -47,7 +47,7 @@ from sqlalchemy.orm import Session
 
 from app import models  # noqa: F401 -- registriert die Tabellen bei Base.metadata
 from app.db import Base
-from app.models import Bundle, Karte
+from app.models import Adresse, Bundle, Karte, Sammlung, SammlungPaket
 from app.oauth import modelle as oauth_modelle  # noqa: F401 -- desgleichen
 
 HIER = Path(__file__).parent
@@ -232,6 +232,11 @@ def bundle(motor, server: str):
                 aktiv: bool = True, karten_pro_durchlauf: int | None = None) -> str:
         slug = _zufallsslug()
         with Session(motor) as sitzung:
+            # Die Adresse zuerst: bundles.slug ist ein Fremdschluessel auf
+            # adressen (siehe app/models.py, Adresse). Im Betrieb erledigt
+            # das freien_slug_finden(), das die Adresse gleich reserviert -
+            # diese Fixture geht daran vorbei und muss sie selbst eintragen.
+            sitzung.add(Adresse(slug=slug, art="paket"))
             eintrag = Bundle(
                 slug=slug, titel=titel, beschreibung=beschreibung or None,
                 gruppe=gruppe or None, selbsteinschaetzung=selbsteinschaetzung,
@@ -546,3 +551,43 @@ def starten(blatt: Page, url: str) -> None:
     vorher = abdruck(blatt)
     blatt.keyboard.press("Enter")
     assert warten_bis_anders(blatt, vorher), "Die Eingabetaste hat den Durchlauf nicht gestartet."
+
+
+@pytest.fixture
+def sammlung(motor, server: str, bundle):
+    """Legt eine Sammlung mit Lernpaketen an und gibt (URL, Paket-Slugs) zurueck.
+
+    Baut auf der Fixture "bundle" auf, statt Lernpakete noch einmal selbst
+    anzulegen - so gibt es eine Stelle, an der ein Lernpaket entsteht.
+    """
+    angelegt: list[str] = []
+
+    def anlegen(titel: str, pakete: list[tuple[str, list[dict]]],
+                beschreibung: str = "") -> tuple[str, list[str]]:
+        slugs = [bundle(karten, titel=paket_titel).rsplit("/", 1)[-1]
+                 for paket_titel, karten in pakete]
+        slug = _zufallsslug()
+        with Session(motor) as sitzung:
+            sitzung.add(Adresse(slug=slug, art="sammlung"))
+            eintrag = Sammlung(slug=slug, titel=titel,
+                               beschreibung=beschreibung or None)
+            sitzung.add(eintrag)
+            sitzung.flush()
+            for stelle, paket_slug in enumerate(slugs):
+                paket_id = sitzung.scalar(
+                    select(Bundle.id).where(Bundle.slug == paket_slug)
+                )
+                sitzung.add(SammlungPaket(sammlung_id=eintrag.id,
+                                          bundle_id=paket_id, position=stelle))
+            sitzung.commit()
+        angelegt.append(slug)
+        return f"{server}/{slug}", slugs
+
+    yield anlegen
+
+    with Session(motor) as sitzung:
+        for slug in angelegt:
+            eintrag = sitzung.scalar(select(Sammlung).where(Sammlung.slug == slug))
+            if eintrag is not None:
+                sitzung.delete(eintrag)
+        sitzung.commit()

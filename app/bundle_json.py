@@ -47,5 +47,9 @@ def bauen(bundle: Bundle) -> dict:
             "flashcards": flashcards,
             "fragen": len(karten) - flashcards,
         },
+        # "sammlung" wird hier NICHT gesetzt. Den Block haengt die Route an,
+        # wenn die Seite ueber /sammlung/paket aufgerufen wurde - er haengt am
+        # WEG hierher und nicht am Lernpaket selbst (ein Paket kann zu
+        # mehreren Sammlungen gehoeren).
         "karten": [_karte(k) for k in karten],
     }

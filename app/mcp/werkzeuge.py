@@ -45,6 +45,19 @@ def url(slug: str) -> str:
     return get_settings().bundle_url(slug)
 
 
+def sammlung_uebersicht(sammlung, anzahl_pakete: int) -> dict:
+    """Die Kurzform einer Sammlung - in jeder Antwort dieselbe."""
+    return {
+        "slug": sammlung.slug,
+        "url": url(sammlung.slug),
+        "titel": sammlung.titel,
+        "beschreibung": sammlung.beschreibung or "",
+        "gruppe": sammlung.gruppe or "",
+        "aktiv": sammlung.aktiv,
+        "anzahl_pakete": anzahl_pakete,
+    }
+
+
 def uebersicht(bundle: Bundle, anzahl_karten: int) -> dict:
     """Die Kurzform eines Lernpakets - in jeder Antwort dieselbe."""
     return {
@@ -382,5 +395,193 @@ def registrieren(server: MCPServer) -> None:
         async with sitzung() as offene:
             bundle = await dienste.bundle_umschalten(offene, slug=slug, aktiv=aktiv)
             antwort = uebersicht(bundle, await dienste.karten_zaehlen(offene, bundle.id))
+            await offene.commit()
+            return antwort
+
+
+    # ====================== Sammlungen ======================
+    #
+    # Sechs Werkzeuge - und damit waechst die Liste von acht auf vierzehn.
+    # Das ist der Preis, und er ist bewusst bezahlt: Jedes zusaetzliche
+    # Werkzeug ist eines, bei dem der Agent danebengreifen kann. Klein
+    # gehalten wird die Liste dadurch, dass sammlung_pakete_setzen die GANZE
+    # Liste ersetzt, statt hinzufuegen/entfernen/verschieben als drei
+    # Werkzeuge anzubieten.
+
+    @server.tool(
+        description=(
+            "Legt eine Sammlung an: ein Bündel von Lernpaketen unter einer "
+            "eigenen Drei-Wort-Adresse. Die Lehrkraft gibt der Klasse dann "
+            "EINEN Link statt vieler. Gib der Lehrerin den Link zurück."
+        )
+    )
+    @als_werkzeug
+    async def sammlung_anlegen(
+        titel: Annotated[str, Field(description="Überschrift der Sammlung.")],
+        beschreibung: Annotated[
+            str | None, Field(default=None, description="Optionaler Einleitungstext, Markdown.")
+        ] = None,
+        gruppe: Annotated[
+            str | None,
+            Field(default=None, description="Optionale Gruppe, z.B. 'Englisch'."),
+        ] = None,
+        pakete: Annotated[
+            list[str] | None,
+            Field(
+                default=None,
+                description=(
+                    "Die Adressen der Lernpakete, in der gewünschten "
+                    "Reihenfolge. Kann später mit sammlung_pakete_setzen "
+                    "geändert werden."
+                ),
+            ),
+        ] = None,
+    ) -> dict:
+        async with sitzung() as offene:
+            sammlung = await dienste.sammlung_anlegen(
+                offene, titel=titel, beschreibung=beschreibung,
+                gruppe=gruppe, pakete=pakete,
+            )
+            antwort = sammlung_uebersicht(sammlung, len(pakete or []))
+            await offene.commit()
+            return antwort
+
+    @server.tool(
+        description=(
+            "Listet die Sammlungen mit Adresse, Link, Titel, Gruppe und "
+            "Paketzahl auf. Standardmäßig nur die aktiven."
+        )
+    )
+    @als_werkzeug
+    async def sammlung_liste(
+        gruppe: Annotated[
+            str | None,
+            Field(default=None, description="Nur Sammlungen dieser Gruppe."),
+        ] = None,
+        nur_aktive: Annotated[
+            bool,
+            Field(default=True, description="Deaktivierte weglassen. Standard: ja."),
+        ] = True,
+    ) -> dict:
+        async with sitzung() as offene:
+            zeilen = await dienste.sammlungen_auflisten(
+                offene, gruppe=gruppe, nur_aktive=nur_aktive
+            )
+            return {
+                "anzahl": len(zeilen),
+                "sammlungen": [
+                    sammlung_uebersicht(eine, anzahl) for eine, anzahl in zeilen
+                ],
+            }
+
+    @server.tool(
+        description=(
+            "Zeigt eine Sammlung mit ihren Lernpaketen in ihrer Reihenfolge. "
+            "Die Adressen daraus braucht man für sammlung_pakete_setzen."
+        )
+    )
+    @als_werkzeug
+    async def sammlung_anzeigen(
+        slug: Annotated[str, Field(description="Die Drei-Wort-Adresse der Sammlung.")],
+    ) -> dict:
+        async with sitzung() as offene:
+            sammlung = await dienste.sammlung_holen(offene, slug)
+            pakete = await dienste.sammlung_pakete(offene, sammlung)
+            return {
+                **sammlung_uebersicht(sammlung, len(pakete)),
+                "pakete": [
+                    {
+                        "position": stelle,
+                        "slug": paket.slug,
+                        # Die verschachtelte Adresse: das Lernpaket IM
+                        # Kontext dieser Sammlung. Genau die gehoert in einen
+                        # Link, den die Klasse bekommt.
+                        "url": url(f"{sammlung.slug}/{paket.slug}"),
+                        "titel": paket.titel,
+                    }
+                    for stelle, paket in enumerate(pakete)
+                ],
+            }
+
+    @server.tool(
+        description=(
+            "Ändert Titel, Beschreibung oder Gruppe einer Sammlung. Die "
+            "Adresse bleibt unverändert. Was nicht angegeben ist, bleibt so."
+        )
+    )
+    @als_werkzeug
+    async def sammlung_aendern(
+        slug: Annotated[str, Field(description="Die Drei-Wort-Adresse der Sammlung.")],
+        titel: Annotated[
+            str | None, Field(default=None, description="Neue Überschrift.")
+        ] = None,
+        beschreibung: Annotated[
+            str | None,
+            Field(default=None, description="Neuer Einleitungstext. Leerer Text löscht ihn."),
+        ] = None,
+        gruppe: Annotated[
+            str | None,
+            Field(default=None, description="Neue Gruppe. Leerer Text löscht sie."),
+        ] = None,
+    ) -> dict:
+        async with sitzung() as offene:
+            sammlung = await dienste.sammlung_aendern(
+                offene, slug=slug, titel=titel,
+                beschreibung=beschreibung, gruppe=gruppe,
+            )
+            pakete = await dienste.sammlung_pakete(offene, sammlung)
+            antwort = sammlung_uebersicht(sammlung, len(pakete))
+            await offene.commit()
+            return antwort
+
+    @server.tool(
+        description=(
+            "Setzt die Lernpakete einer Sammlung - die ÜBERGEBENE LISTE "
+            "ERSETZT die bisherige vollständig, in der angegebenen "
+            "Reihenfolge. Zum Umsortieren oder Ergänzen also erst "
+            "sammlung_anzeigen, dann die vollständige neue Liste schicken. "
+            "Eine leere Liste leert die Sammlung."
+        )
+    )
+    @als_werkzeug
+    async def sammlung_pakete_setzen(
+        slug: Annotated[str, Field(description="Die Drei-Wort-Adresse der Sammlung.")],
+        pakete: Annotated[
+            list[str],
+            Field(description="Die Adressen der Lernpakete in der gewünschten Reihenfolge."),
+        ],
+    ) -> dict:
+        async with sitzung() as offene:
+            sammlung, gefunden = await dienste.sammlung_pakete_setzen(
+                offene, slug=slug, pakete=pakete
+            )
+            antwort = {
+                **sammlung_uebersicht(sammlung, len(gefunden)),
+                "pakete": [
+                    {"position": stelle, "slug": paket.slug, "titel": paket.titel,
+                     "url": url(f"{sammlung.slug}/{paket.slug}")}
+                    for stelle, paket in enumerate(gefunden)
+                ],
+            }
+            await offene.commit()
+            return antwort
+
+    @server.tool(
+        description=(
+            "Schaltet eine Sammlung unsichtbar oder wieder sichtbar. Die "
+            "Lernpakete darin bleiben einzeln erreichbar."
+        )
+    )
+    @als_werkzeug
+    async def sammlung_deaktivieren(
+        slug: Annotated[str, Field(description="Die Drei-Wort-Adresse der Sammlung.")],
+        aktiv: Annotated[
+            bool, Field(description="false schaltet unsichtbar, true wieder sichtbar.")
+        ],
+    ) -> dict:
+        async with sitzung() as offene:
+            sammlung = await dienste.sammlung_umschalten(offene, slug=slug, aktiv=aktiv)
+            pakete = await dienste.sammlung_pakete(offene, sammlung)
+            antwort = sammlung_uebersicht(sammlung, len(pakete))
             await offene.commit()
             return antwort

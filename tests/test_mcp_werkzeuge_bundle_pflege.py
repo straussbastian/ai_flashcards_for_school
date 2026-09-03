@@ -204,11 +204,18 @@ async def test_deaktivieren_eines_unbekannten_slugs_nennt_bundle_liste(
 # ===================== Vollstaendigkeit =====================
 
 
-async def test_alle_acht_werkzeuge_sind_da(konfiguration):
-    """Die Spec listet in Abschnitt 5 genau acht Werkzeuge."""
+async def test_alle_werkzeuge_sind_da(konfiguration):
+    """Acht fuer Lernpakete und Karten, sechs fuer Sammlungen.
+
+    Die Zahl steht hier ausdruecklich, weil sie etwas kostet: Jedes
+    zusaetzliche Werkzeug ist eines, bei dem der Agent danebengreifen kann.
+    Waechst diese Liste, soll das eine Entscheidung sein und kein
+    Nebeneffekt - deshalb faellt der Test, wenn jemand eines hinzufuegt.
+    """
     server, _ = mcp_bauen()
     namen = {eines.name for eines in await server.list_tools()}
     assert namen == {
+        # Lernpakete und Karten
         "bundle_anlegen",
         "bundle_liste",
         "bundle_anzeigen",
@@ -217,4 +224,12 @@ async def test_alle_acht_werkzeuge_sind_da(konfiguration):
         "karte_aendern",
         "karte_loeschen",
         "bundle_deaktivieren",
+        # Sammlungen
+        "sammlung_anlegen",
+        "sammlung_liste",
+        "sammlung_anzeigen",
+        "sammlung_aendern",
+        "sammlung_pakete_setzen",
+        "sammlung_deaktivieren",
     }
+    assert len(namen) == 14

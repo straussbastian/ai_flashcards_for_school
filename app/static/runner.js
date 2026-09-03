@@ -312,8 +312,15 @@
     }
 
     if (ansicht === "ergebnis") {
-      eintraege.push({ tasten: ["A", "Enter"], zeige: "A nochmal",
-                       tun: () => starten(BUNDLE.karten) });
+      if (BUNDLE.sammlung && BUNDLE.sammlung.naechstes) {
+        eintraege.push({ tasten: ["W", "Enter"], zeige: "W weiter",
+                         tun: () => { window.location.href = BUNDLE.sammlung.naechstes.url; } });
+        eintraege.push({ tasten: ["A"], zeige: "A nochmal",
+                         tun: () => starten(BUNDLE.karten) });
+      } else {
+        eintraege.push({ tasten: ["A", "Enter"], zeige: "A nochmal",
+                         tun: () => starten(BUNDLE.karten) });
+      }
       // Der Knopf entsteht nur, wenn etwas danebenging - die Taste jetzt
       // aus derselben Bedingung.
       const daneben = danebenGegangen();
@@ -602,8 +609,39 @@
     }
 
     const knoepfe = knoten("div", "ergebnis-knoepfe");
-    const nochmal = knopf("knopf", "A", "Nochmal starten", () => starten(BUNDLE.karten));
+
+    /* Der Weg weiter durch die Sammlung. Den Block "sammlung" gibt es nur,
+       wenn die Lernseite ueber /sammlung/paket aufgerufen wurde (siehe
+       app/routen/lernseite.py). Fehlt er, verhaelt sich der
+       Ergebnisbildschirm wie eh und je.
+
+       Warum der Server das naechste Paket nennt und nicht der Browser: Der
+       Runner kennt nur sein eigenes Paket. Die Reihenfolge gehoert ins
+       Datenmodell, nicht in eine Vermutung hier. */
+    const sammlung = BUNDLE.sammlung;
+    if (sammlung && sammlung.naechstes) {
+      const weiter = knoten("a", "knopf");
+      weiter.href = sammlung.naechstes.url;
+      // Nur "weiter" und nicht der volle Titel des naechsten Pakets: Auf dem
+      // Ergebnisbildschirm stehen drei Knoepfe nebeneinander, und ein Titel
+      // wie "Englisch 2: Schule und Schulsachen" brach dort auf vier Zeilen
+      // um. Der Titel steht ohnehin auf der Sammlungsseite - und das
+      // title-Attribut nennt ihn beim Verweilen.
+      weiter.title = `weiter zu ${sammlung.naechstes.titel}`;
+      weiter.append(knoten("span", "taste", "W"),
+                    document.createTextNode("weiter \u2192"));
+      knoepfe.append(weiter);
+    }
+
+    const nochmal = knopf("knopf leise", "A", "Nochmal starten", () => starten(BUNDLE.karten));
     knoepfe.append(nochmal);
+
+    if (sammlung) {
+      const zurueck = knoten("a", "knopf leise");
+      zurueck.href = sammlung.url;
+      zurueck.append(document.createTextNode(`\u2190 zur\u00fcck zu ${sammlung.titel}`));
+      knoepfe.append(zurueck);
+    }
 
     if (daneben.length) {
       knoepfe.append(knopf("knopf leise", "B", `Nur die Fehler (${daneben.length})`,
