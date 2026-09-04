@@ -1,0 +1,341 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flashcards für die Berufsschule — Dokumentation</title>
+<meta name="description" content="Dokumentation zum Projekt Flashcards für die Berufsschule: technische Beschreibung und Architekturdiagramm.">
+
+<!-- Dieselben drei Familien wie auf der technischen Beschreibung. Ohne Netz
+     greifen die Ersatzfamilien, die jede Regel unten mitfuehrt. -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap">
+
+<style>
+  /* Die Farben, Schriften und Masse stammen unveraendert aus
+     technische-beschreibung.html - beide Seiten sollen als eine gelesen
+     werden. */
+  :root {
+    --grund:        #f1f3f0;
+    --flaeche:      #ffffff;
+    --flaeche-leise:#e9ece8;
+    --tinte:        #1a1f24;
+    --tinte-leise:  #5c6871;
+    --linie:        #dde1dc;
+    --linie-stark:  #c7cec6;
+
+    --akzent:       #ffd23f;
+    --akzent-tief:  #8a6a00;
+
+    --band-grund:   #1b2026;
+    --band-tief:    #14171b;
+    --band-tinte:   #eef1ee;
+    --band-leise:   #93a0a9;
+    --band-linie:   rgba(255,255,255,.14);
+
+    --schrift-titel: "Archivo", system-ui, -apple-system, sans-serif;
+    --schrift-text:  "Source Serif 4", Georgia, "Times New Roman", serif;
+    --schrift-daten: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --grund:        #14171b;
+      --flaeche:      #1c2126;
+      --flaeche-leise:#232a30;
+      --tinte:        #e7eae6;
+      --tinte-leise:  #98a4ad;
+      --linie:        #2b3238;
+      --linie-stark:  #3a444c;
+      --akzent-tief:  #ffd869;
+    }
+  }
+  :root[data-theme="dark"] {
+    --grund:        #14171b;
+    --flaeche:      #1c2126;
+    --flaeche-leise:#232a30;
+    --tinte:        #e7eae6;
+    --tinte-leise:  #98a4ad;
+    --linie:        #2b3238;
+    --linie-stark:  #3a444c;
+    --akzent-tief:  #ffd869;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--grund);
+    color: var(--tinte);
+    font-family: var(--schrift-text);
+    font-size: 17.5px;
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+  }
+  img { max-width: 100%; }
+
+  /* ---------------------------------------------------------- Kopfband */
+
+  .band {
+    background:
+      radial-gradient(120% 140% at 12% 0%, #232a31 0%, var(--band-grund) 46%, var(--band-tief) 100%);
+    color: var(--band-tinte);
+    padding: 64px 28px 54px;
+    border-bottom: 3px solid var(--akzent);
+  }
+  .band-innen { max-width: 920px; margin: 0 auto; }
+
+  .augenbraue {
+    font-family: var(--schrift-daten);
+    font-size: 12px;
+    letter-spacing: .18em;
+    text-transform: uppercase;
+    color: var(--akzent);
+    margin: 0 0 18px;
+  }
+  .band h1 {
+    font-family: var(--schrift-titel);
+    font-weight: 700;
+    font-size: clamp(2.1rem, 5.4vw, 3.3rem);
+    line-height: 1.06;
+    letter-spacing: -.022em;
+    text-wrap: balance;
+    margin: 0 0 18px;
+    max-width: 20ch;
+  }
+  .band p.vorspann {
+    margin: 0;
+    max-width: 56ch;
+    font-size: 1.16rem;
+    line-height: 1.55;
+    opacity: .92;
+  }
+
+  .adresse {
+    display: inline-flex;
+    align-items: baseline;
+    font-family: var(--schrift-daten);
+    font-size: .92rem;
+    margin: 30px 0 0;
+    padding: 11px 15px;
+    border: 1px solid var(--band-linie);
+    border-radius: 3px;
+    background: rgba(0,0,0,.24);
+    color: var(--band-leise);
+    max-width: 100%;
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+  .adresse b { color: var(--akzent); font-weight: 500; }
+
+  .kenndaten {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 28px;
+    margin: 34px 0 0;
+    padding-top: 22px;
+    border-top: 1px solid var(--band-linie);
+    font-family: var(--schrift-daten);
+    font-size: 12.5px;
+    color: var(--band-leise);
+  }
+  .kenndaten b { color: var(--band-tinte); font-weight: 400; }
+
+  /* ---------------------------------------------------------- Gerüst */
+
+  /* 976 = 920 Textbreite + 2x28 Innenabstand: damit steht die linke Kante
+     hier genau auf der des Kopfbands, das seine 28 als padding traegt. */
+  main {
+    max-width: 976px;
+    margin: 0 auto;
+    padding: 0 28px 24px;
+  }
+
+  h2 {
+    font-family: var(--schrift-daten);
+    font-weight: 500;
+    font-size: 11.5px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--tinte-leise);
+    margin: 58px 0 0;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--linie-stark);
+  }
+
+  /* ------------------------------------------------------- Die Türen */
+
+  .tueren { margin: 54px 0 0; border-top: 1px solid var(--linie-stark); }
+
+  .tuer {
+    display: block;
+    position: relative;
+    text-decoration: none;
+    color: inherit;
+    padding: 26px 0;
+    border-bottom: 1px solid var(--linie);
+  }
+  /* Die gelbe Markierung liegt im Seitenrand und nicht im Textfluss -
+     sonst liefen die Trennlinien der Tueren weiter nach links als alle
+     anderen Linien der Seite. */
+  .tuer::before {
+    content: "";
+    position: absolute;
+    left: -27px;
+    top: 0;
+    bottom: -1px;
+    width: 3px;
+    background: transparent;
+  }
+  .tuer:hover::before, .tuer:focus-visible::before { background: var(--akzent); }
+  .tuer:hover h3, .tuer:focus-visible h3 {
+    text-decoration: underline;
+    text-decoration-color: var(--akzent);
+    text-decoration-thickness: 2px;
+    text-underline-offset: 5px;
+  }
+
+  .tuer h3 {
+    font-family: var(--schrift-titel);
+    font-weight: 600;
+    font-size: 1.42rem;
+    letter-spacing: -.012em;
+    margin: 0 0 7px;
+    text-wrap: balance;
+  }
+  .tuer p { margin: 0; max-width: 62ch; line-height: 1.55; }
+  .tuer .beiwerk {
+    display: block;
+    margin-top: 12px;
+    font-family: var(--schrift-daten);
+    font-size: 12px;
+    color: var(--tinte-leise);
+  }
+
+  /* ------------------------------------------------- Im Repository */
+
+  ul.liste { list-style: none; margin: 0; padding: 0; }
+  ul.liste li {
+    padding: 15px 0;
+    border-bottom: 1px solid var(--linie);
+    display: grid;
+    grid-template-columns: minmax(0, 26ch) minmax(0, 1fr);
+    gap: 6px 24px;
+    align-items: baseline;
+    font-size: .95rem;
+  }
+  ul.liste a {
+    font-family: var(--schrift-daten);
+    font-size: .84rem;
+    color: var(--akzent-tief);
+    text-decoration-color: var(--linie-stark);
+    text-underline-offset: 3px;
+  }
+  ul.liste a:hover { text-decoration-color: var(--akzent); }
+  ul.liste span { color: var(--tinte-leise); }
+
+  /* ---------------------------------------------------------- Fuß */
+
+  footer {
+    max-width: 976px;
+    margin: 0 auto;
+    padding: 30px 28px 70px;
+    font-family: var(--schrift-daten);
+    font-size: 12px;
+    color: var(--tinte-leise);
+    line-height: 1.7;
+  }
+  footer a { color: inherit; text-underline-offset: 3px; }
+
+  :focus-visible { outline: 2px solid var(--akzent-tief); outline-offset: 2px; }
+
+  @media (max-width: 620px) {
+    .band { padding: 46px 22px 40px; }
+    main, footer { padding-left: 22px; padding-right: 22px; }
+    .tuer { padding: 22px 0; }
+    .tuer::before { left: -14px; }
+    ul.liste li { grid-template-columns: minmax(0, 1fr); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+  }
+</style>
+</head>
+<body>
+
+<header class="band">
+  <div class="band-innen">
+    <p class="augenbraue">Dokumentation</p>
+    <h1>Flashcards für die Berufsschule</h1>
+    <p class="vorspann">
+      Karteikarten und Quizfragen als Lernseite im Netz. Die Lehrkraft gibt
+      ihrem KI-Agenten ein Arbeitsblatt und bekommt einen Link zurück. Die
+      Klasse öffnet ihn und legt los – ohne Konto, ohne App, ohne dass
+      irgendwo ein Ergebnis gespeichert wird.
+    </p>
+    <p class="adresse">https://karten.deine-schule.de/<b>blaue-katze-springt</b></p>
+    <div class="kenndaten">
+      <span>Stand <b>4. September 2026</b></span>
+      <span>Lizenz <b>MIT</b></span>
+      <span>Python 3.13 · FastAPI · <b>PostgreSQL 17</b></span>
+    </div>
+  </div>
+</header>
+
+<main>
+
+  <div class="tueren">
+
+    <a class="tuer" href="technische-beschreibung.html">
+      <h3>Technische Beschreibung</h3>
+      <p>
+        Zweck, Aufbau, Bedienung, Sicherheit, Betrieb und Grenzen auf einer
+        Seite – ohne eine Zeile Programmcode. Geschrieben für Kolleginnen und
+        Kollegen, Schulleitung und Datenschutz.
+      </p>
+      <span class="beiwerk">Zehn Abschnitte · rund 20 Minuten Lesezeit</span>
+    </a>
+
+    <a class="tuer" href="architektur.html">
+      <h3>Architekturdiagramm</h3>
+      <p>
+        Dieselbe Anlage als anklickbares Schaubild: welcher Weg wohin führt,
+        wo OAuth greift und was alles hinter dem einen veröffentlichten Port
+        liegt.
+      </p>
+      <span class="beiwerk">Anklickbar · hell und dunkel · als Bild speicherbar</span>
+    </a>
+
+  </div>
+
+  <h2>Im Repository</h2>
+  <ul class="liste">
+    <li>
+      <a href="https://github.com/straussbastian/ai_flashcards_for_school/blob/main/docs/betrieb-server.md">docs/betrieb-server.md</a>
+      <span>Betrieb auf einem eigenen Server, Schritt für Schritt</span>
+    </li>
+    <li>
+      <a href="https://github.com/straussbastian/ai_flashcards_for_school/blob/main/docs/praxistest-cowork.md">docs/praxistest-cowork.md</a>
+      <span>Den MCP-Server mit Claude Cowork verbinden</span>
+    </li>
+    <li>
+      <a href="https://github.com/straussbastian/ai_flashcards_for_school#readme">README.md</a>
+      <span>Selbst betreiben, entwickeln, testen – englisch, deutsch daneben</span>
+    </li>
+    <li>
+      <a href="https://github.com/straussbastian/ai_flashcards_for_school">Quelltext</a>
+      <span>Das ganze Projekt auf GitHub</span>
+    </li>
+  </ul>
+
+</main>
+
+<footer>
+  Flashcards für die Berufsschule · MIT-Lizenz · © 2026
+  <a href="https://bastianstrauss.digital">Bastian Strauss</a>, Varel<br>
+  Benutzen, verändern, weitergeben – auch gewerblich. Eine Schule, die dieses
+  Projekt auf einem eigenen Server betreibt, muss niemanden fragen.
+</footer>
+
+</body>
+</html>
