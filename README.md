@@ -55,15 +55,14 @@ button sets everything back to zero.
 
 | Document | What it covers |
 |---|---|
-| **[Technical description](docs/technische-beschreibung.md)** (German) | Purpose, structure, operation, security, running it and its limits on one page – without a line of code. Written for colleagues, school management and data protection officers. The same page, typeset for passing on: [technische-beschreibung.html](docs/technische-beschreibung.html) |
-| **[Architecture diagram](docs/architektur.html)** (German) | The setup as a clickable diagram: which path leads where, and everything that sits behind the one published port |
+| **[Technical description](https://straussbastian.github.io/ai_flashcards_for_school/technische-beschreibung.html)** (German) | Purpose, structure, operation, security, running it and its limits on one page – without a line of code. Written for colleagues, school management and data protection officers. Also in the repository as [Markdown](docs/technische-beschreibung.md). |
+| **[Architecture diagram](https://straussbastian.github.io/ai_flashcards_for_school/architektur.html)** (German) | The setup as a clickable diagram: which path leads where, and everything that sits behind the one published port |
 | [docs/betrieb-server.md](docs/betrieb-server.md) (German) | Running it on a server of your own, step by step |
 | [docs/praxistest-cowork.md](docs/praxistest-cowork.md) (German) | Connecting the MCP server to Claude Cowork |
 
-GitHub renders the Markdown versions directly. The two HTML pages are
-self-contained files for the browser – after cloning, a double click is
-enough; on github.com the link only leads to the source, though, because
-GitHub does not render HTML out of a repository.
+The first two are published as GitHub Pages and open with a single click.
+The same files sit in the repository under `docs/` – after cloning, a double
+click there is enough.
 
 ## Running it yourself – which way is mine?
 

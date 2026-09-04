@@ -50,15 +50,14 @@ steht das Ergebnis, und ein Knopf setzt alles auf null.
 
 | Dokument | Worum es geht |
 |---|---|
-| **[Technische Beschreibung](docs/technische-beschreibung.md)** | Zweck, Aufbau, Bedienung, Sicherheit, Betrieb und Grenzen auf einer Seite – ohne eine Zeile Programmcode. Für Kolleginnen und Kollegen, Schulleitung und Datenschutz. Zum Weitergeben dieselbe Seite gestaltet: [technische-beschreibung.html](docs/technische-beschreibung.html) |
-| **[Architekturdiagramm](docs/architektur.html)** | Die Anlage als anklickbares Schaubild: welcher Weg wohin führt und was alles hinter dem einen veröffentlichten Port liegt |
+| **[Technische Beschreibung](https://straussbastian.github.io/ai_flashcards_for_school/technische-beschreibung.html)** | Zweck, Aufbau, Bedienung, Sicherheit, Betrieb und Grenzen auf einer Seite – ohne eine Zeile Programmcode. Für Kolleginnen und Kollegen, Schulleitung und Datenschutz. Im Repository daneben als [Markdown](docs/technische-beschreibung.md). |
+| **[Architekturdiagramm](https://straussbastian.github.io/ai_flashcards_for_school/architektur.html)** | Die Anlage als anklickbares Schaubild: welcher Weg wohin führt und was alles hinter dem einen veröffentlichten Port liegt |
 | [docs/betrieb-server.md](docs/betrieb-server.md) | Betrieb auf einem eigenen Server, Schritt für Schritt |
 | [docs/praxistest-cowork.md](docs/praxistest-cowork.md) | Den MCP-Server mit Claude Cowork verbinden |
 
-Die Markdown-Fassungen zeigt GitHub direkt an. Die beiden HTML-Seiten sind in
-sich geschlossene Dateien für den Browser – nach dem Klonen genügt ein
-Doppelklick; auf github.com führt der Link dagegen nur zum Quelltext, denn
-GitHub stellt HTML aus einem Repository nicht dar.
+Die beiden ersten Seiten liegen als GitHub Pages im Netz und öffnen sich mit
+einem Klick. Dieselben Dateien stehen im Repository unter `docs/` – nach dem
+Klonen genügt dort ein Doppelklick.
 
 ## Selbst betreiben – welcher Weg ist meiner?
 
