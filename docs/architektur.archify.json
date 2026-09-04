@@ -1,0 +1,354 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Flashcards für die Berufsschule — Architektur",
+    "output": "architektur.html",
+    "quality_profile": "showcase",
+    "viewBox": [
+      1290,
+      620
+    ],
+    "repository": {
+      "url": "https://github.com/straussbastian/ai_flashcards_for_school",
+      "revision": "9ec60edac9c33c02dffcf606557f941a35b85d8e"
+    },
+    "views": [
+      {
+        "id": "pflege",
+        "label": "Weg der Lehrkraft",
+        "focus": [
+          "agent",
+          "caddy",
+          "mcp",
+          "dienste",
+          "db"
+        ],
+        "note": "Vom Arbeitsblatt im Agenten bis zum gespeicherten Lernpaket."
+      },
+      {
+        "id": "lernen",
+        "label": "Weg der Klasse",
+        "focus": [
+          "klasse",
+          "caddy",
+          "lernseite",
+          "db"
+        ],
+        "note": "Ein Link, eine Seite, kein Konto und kein gespeichertes Ergebnis."
+      },
+      {
+        "id": "zugang",
+        "label": "Zugang und Adressen",
+        "focus": [
+          "oauth",
+          "mcp",
+          "db",
+          "caddy"
+        ],
+        "note": "OAuth schützt das Pflegen; die unerratbare Adresse schützt das Lernen."
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": "agent",
+      "type": "external",
+      "label": "KI-Agent der Lehrkraft",
+      "sublabel": "Claude Cowork",
+      "pos": [
+        40,
+        170
+      ],
+      "size": [
+        170,
+        70
+      ]
+    },
+    {
+      "id": "klasse",
+      "type": "external",
+      "label": "Klasse im Browser",
+      "sublabel": "runner.js, kein Konto",
+      "tag": "kein Ergebnis gespeichert",
+      "pos": [
+        40,
+        470
+      ],
+      "size": [
+        170,
+        70
+      ],
+      "sources": [
+        {
+          "path": "app/static/runner.js",
+          "label": "Runner"
+        }
+      ]
+    },
+    {
+      "id": "caddy",
+      "type": "cloud",
+      "label": "Caddy",
+      "sublabel": "HTTPS :443",
+      "tag": "Let's Encrypt",
+      "pos": [
+        290,
+        320
+      ],
+      "size": [
+        150,
+        70
+      ],
+      "sources": [
+        {
+          "path": "compose.server.yml",
+          "line": 40,
+          "label": "reverse-proxy"
+        }
+      ]
+    },
+    {
+      "id": "oauth",
+      "type": "security",
+      "label": "OAuth-Server",
+      "sublabel": "/oauth/authorize",
+      "tag": "PKCE S256",
+      "pos": [
+        530,
+        70
+      ],
+      "size": [
+        170,
+        70
+      ],
+      "sources": [
+        {
+          "path": "app/routen/oauth.py",
+          "line": 45,
+          "label": "Discovery + Token"
+        }
+      ]
+    },
+    {
+      "id": "mcp",
+      "type": "backend",
+      "label": "MCP-Endpunkt",
+      "sublabel": "POST /mcp",
+      "pos": [
+        530,
+        190
+      ],
+      "size": [
+        170,
+        70
+      ],
+      "sources": [
+        {
+          "path": "app/mcp/__init__.py",
+          "line": 95,
+          "label": "MCPWeiche"
+        }
+      ]
+    },
+    {
+      "id": "dienste",
+      "type": "backend",
+      "label": "MCP-Werkzeuge",
+      "sublabel": "14 Tools",
+      "pos": [
+        790,
+        190
+      ],
+      "size": [
+        170,
+        70
+      ],
+      "sources": [
+        {
+          "path": "app/mcp/werkzeuge.py",
+          "line": 100,
+          "label": "registrieren()"
+        }
+      ]
+    },
+    {
+      "id": "lernseite",
+      "type": "backend",
+      "label": "Lernseiten-Routen",
+      "sublabel": "/{slug}",
+      "pos": [
+        530,
+        470
+      ],
+      "size": [
+        170,
+        70
+      ],
+      "sources": [
+        {
+          "path": "app/routen/lernseite.py",
+          "line": 163,
+          "label": "lernseite()"
+        }
+      ]
+    },
+    {
+      "id": "db",
+      "type": "database",
+      "label": "PostgreSQL 17",
+      "sublabel": "adressen, bundles, karten",
+      "pos": [
+        1040,
+        320
+      ],
+      "size": [
+        170,
+        76
+      ],
+      "sources": [
+        {
+          "path": "app/models.py",
+          "line": 84,
+          "label": "Adressraum"
+        }
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "Docker-Verbund — nur Caddy hat veröffentlichte Ports",
+      "wraps": [
+        "caddy",
+        "oauth",
+        "mcp",
+        "dienste",
+        "lernseite",
+        "db"
+      ]
+    },
+    {
+      "kind": "security-group",
+      "label": "Bearer-Token, Scope lernseiten",
+      "wraps": [
+        "oauth",
+        "mcp"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "agent-caddy",
+      "from": "agent",
+      "to": "caddy",
+      "label": "HTTPS",
+      "variant": "emphasis"
+    },
+    {
+      "id": "klasse-caddy",
+      "from": "klasse",
+      "to": "caddy",
+      "label": "HTTPS"
+    },
+    {
+      "id": "caddy-oauth",
+      "from": "caddy",
+      "to": "oauth",
+      "label": "Discovery, Zustimmung",
+      "fromSide": "top",
+      "toSide": "left",
+      "via": [
+        [
+          365,
+          105
+        ]
+      ]
+    },
+    {
+      "id": "caddy-mcp",
+      "from": "caddy",
+      "to": "mcp",
+      "label": "Streamable HTTP",
+      "variant": "emphasis"
+    },
+    {
+      "id": "caddy-lernseite",
+      "from": "caddy",
+      "to": "lernseite",
+      "label": "GET /{slug}"
+    },
+    {
+      "id": "oauth-mcp",
+      "from": "oauth",
+      "to": "mcp",
+      "label": "Token prüfen",
+      "variant": "security",
+      "labelDy": 24
+    },
+    {
+      "id": "mcp-dienste",
+      "from": "mcp",
+      "to": "dienste",
+      "label": "Werkzeugaufruf",
+      "variant": "emphasis"
+    },
+    {
+      "id": "dienste-db",
+      "from": "dienste",
+      "to": "db",
+      "label": "SQL, schreibend",
+      "variant": "emphasis"
+    },
+    {
+      "id": "lernseite-db",
+      "from": "lernseite",
+      "to": "db",
+      "label": "SQL, nur lesend"
+    },
+    {
+      "id": "oauth-db",
+      "from": "oauth",
+      "to": "db",
+      "label": "Clients, Codes, Token",
+      "variant": "dashed",
+      "fromSide": "right",
+      "toSide": "top",
+      "via": [
+        [
+          1125,
+          105
+        ]
+      ]
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Ein Adressraum",
+      "items": [
+        "Jede Drei-Wort-Adresse liegt genau einmal in adressen",
+        "art entscheidet: Lernpaket oder Sammlung",
+        "Nichts wird gelöscht, nur unsichtbar geschaltet"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Eine Anwendung",
+      "items": [
+        "Ein uvicorn trägt Lernseiten, MCP und OAuth",
+        "Alembic wandert beim Start hoch",
+        "Kein Adminbereich — Inhalte kommen nur über MCP herein"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Zugang",
+      "items": [
+        "Pflegen: OAuth mit PKCE, Zustimmung per Passwort",
+        "Lernen: die unerratbare Adresse ist der ganze Schutz",
+        "Der Durchgang lebt im Browser und wird nirgends gespeichert"
+      ]
+    }
+  ]
+}

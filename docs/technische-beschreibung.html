@@ -1,0 +1,1072 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flashcards für die Berufsschule</title>
+<meta name="description" content="Technische Beschreibung des Projekts Flashcards für die Berufsschule: Zweck, Aufbau, Bedienung, Sicherheit und Betrieb – ohne Programmcode.">
+
+<!-- Die Schriften kommen von Google Fonts. Ohne Netz greifen die
+     Ersatzfamilien, die jede Regel unten ausdruecklich mitfuehrt
+     (Georgia, system-ui, Menlo) - die Seite bleibt lesbar. -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap">
+
+<style>
+  /* Der kleine Reset, den die Artifact-Umgebung sonst selbst mitbringt.
+     Steht vor dem Stil der Seite, damit die Seite ihn ueberschreiben kann. */
+  :root { color-scheme: light dark; }
+  body { margin: 0; }
+  img { max-width: 100%; }
+  [hidden] { display: none !important; }
+</style>
+
+<style>
+  :root {
+    /* Grundfarben: Papier mit leichter Schiefer-Neigung, kein reines Grau */
+    --grund:        #f1f3f0;
+    --flaeche:      #ffffff;
+    --flaeche-leise:#e9ece8;
+    --tinte:        #1a1f24;
+    --tinte-leise:  #5c6871;
+    --linie:        #dde1dc;
+    --linie-stark:  #c7cec6;
+
+    /* Der Zettel aus der Anwendung selbst */
+    --akzent:       #ffd23f;
+    --akzent-tief:  #8a6a00;
+    --zettel-vorn:  linear-gradient(158deg, #ffe57a 0%, #ffd23f 100%);
+    --zettel-tinte: #2b2410;
+
+    /* Richtig/falsch: dieselbe Semantik wie in der Lernseite */
+    --ja:           #2f9e52;
+    --nein:         #c4342b;
+
+    /* Das Band oben ist bewusst in beiden Darstellungen dunkel:
+       es ist die Tafel, vor der die Anwendung spielt. */
+    --band-grund:   #1b2026;
+    --band-tief:    #14171b;
+    --band-tinte:   #eef1ee;
+    --band-leise:   #93a0a9;
+    --band-linie:   rgba(255,255,255,.14);
+
+    --schrift-titel: "Archivo", system-ui, -apple-system, sans-serif;
+    --schrift-text:  "Source Serif 4", Georgia, "Times New Roman", serif;
+    --schrift-daten: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+    --mass: 67ch;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --grund:        #14171b;
+      --flaeche:      #1c2126;
+      --flaeche-leise:#232a30;
+      --tinte:        #e7eae6;
+      --tinte-leise:  #98a4ad;
+      --linie:        #2b3238;
+      --linie-stark:  #3a444c;
+      --akzent-tief:  #ffd869;
+      --ja:           #5cc47c;
+      --nein:         #ef6f65;
+    }
+  }
+  :root[data-theme="dark"] {
+    --grund:        #14171b;
+    --flaeche:      #1c2126;
+    --flaeche-leise:#232a30;
+    --tinte:        #e7eae6;
+    --tinte-leise:  #98a4ad;
+    --linie:        #2b3238;
+    --linie-stark:  #3a444c;
+    --akzent-tief:  #ffd869;
+    --ja:           #5cc47c;
+    --nein:         #ef6f65;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--grund);
+    color: var(--tinte);
+    font-family: var(--schrift-text);
+    font-size: 17.5px;
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ---------------------------------------------------------- Kopfband */
+
+  .band {
+    background:
+      radial-gradient(120% 140% at 12% 0%, #232a31 0%, var(--band-grund) 46%, var(--band-tief) 100%);
+    color: var(--band-tinte);
+    padding: 60px 28px 52px;
+    border-bottom: 3px solid var(--akzent);
+  }
+  .band-innen { max-width: 1040px; margin: 0 auto; }
+
+  .augenbraue {
+    font-family: var(--schrift-daten);
+    font-size: 12px;
+    letter-spacing: .18em;
+    text-transform: uppercase;
+    color: var(--akzent);
+    margin: 0 0 18px;
+  }
+  .band h1 {
+    font-family: var(--schrift-titel);
+    font-weight: 700;
+    font-size: clamp(2.1rem, 5.4vw, 3.3rem);
+    line-height: 1.06;
+    letter-spacing: -.022em;
+    text-wrap: balance;
+    margin: 0 0 18px;
+    max-width: 20ch;
+  }
+  .band p.vorspann {
+    margin: 0;
+    max-width: 56ch;
+    font-size: 1.16rem;
+    line-height: 1.55;
+    color: var(--band-tinte);
+    opacity: .92;
+  }
+
+  .adresse {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0;
+    font-family: var(--schrift-daten);
+    font-size: .92rem;
+    margin: 30px 0 0;
+    padding: 11px 15px;
+    border: 1px solid var(--band-linie);
+    border-radius: 3px;
+    background: rgba(0,0,0,.24);
+    color: var(--band-leise);
+    max-width: 100%;
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+  .adresse b { color: var(--akzent); font-weight: 500; }
+
+  .kenndaten {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 28px;
+    margin: 34px 0 0;
+    padding-top: 22px;
+    border-top: 1px solid var(--band-linie);
+    font-family: var(--schrift-daten);
+    font-size: 12.5px;
+    color: var(--band-leise);
+  }
+  .kenndaten span b {
+    color: var(--band-tinte);
+    font-weight: 400;
+  }
+
+  /* ---------------------------------------------------------- Gerüst */
+
+  .huelle {
+    max-width: 1040px;
+    margin: 0 auto;
+    padding: 0 28px 110px;
+    display: grid;
+    grid-template-columns: 176px minmax(0, 1fr);
+    gap: 60px;
+    align-items: start;
+  }
+
+  .schiene {
+    position: sticky;
+    top: 32px;
+    padding-top: 62px;
+    font-family: var(--schrift-daten);
+    font-size: 12.5px;
+    line-height: 1.5;
+  }
+  .schiene ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 11px; }
+  .schiene a {
+    color: var(--tinte-leise);
+    text-decoration: none;
+    display: block;
+    padding-left: 13px;
+    border-left: 2px solid var(--linie);
+  }
+  .schiene a:hover, .schiene a:focus-visible { color: var(--tinte); border-left-color: var(--akzent); }
+
+  .inhalt { max-width: var(--mass); }
+
+  /* ---------------------------------------------------------- Typografie */
+
+  section { padding-top: 62px; scroll-margin-top: 24px; }
+
+  h2 {
+    font-family: var(--schrift-titel);
+    font-weight: 600;
+    font-size: 1.62rem;
+    letter-spacing: -.012em;
+    line-height: 1.2;
+    text-wrap: balance;
+    margin: 0 0 6px;
+  }
+  h3 {
+    font-family: var(--schrift-titel);
+    font-weight: 600;
+    font-size: 1.06rem;
+    letter-spacing: -.004em;
+    margin: 38px 0 4px;
+  }
+  h2 + p, h3 + p, h2 + .fliess, h3 + .fliess { margin-top: 10px; }
+
+  p { margin: 0 0 16px; }
+  .inhalt > section > p:last-child { margin-bottom: 0; }
+
+  .lead {
+    font-size: 1.08rem;
+    color: var(--tinte-leise);
+    margin-bottom: 24px;
+  }
+
+  a { color: inherit; text-decoration-color: var(--linie-stark); text-underline-offset: 3px; }
+  a:hover { text-decoration-color: var(--akzent); }
+
+  strong { font-weight: 600; }
+
+  .m {
+    font-family: var(--schrift-daten);
+    font-size: .855em;
+    background: var(--flaeche-leise);
+    border: 1px solid var(--linie);
+    border-radius: 3px;
+    padding: 1px 5px;
+    white-space: nowrap;
+  }
+
+  ul.punkte { margin: 0 0 16px; padding-left: 1.1em; }
+  ul.punkte li { margin-bottom: 7px; }
+  ul.punkte li::marker { color: var(--linie-stark); }
+
+  /* ---------------------------------------------------------- Tabellen */
+
+  .rollt { overflow-x: auto; margin: 20px 0 4px; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: .93rem;
+    min-width: 460px;
+  }
+  th {
+    text-align: left;
+    font-family: var(--schrift-daten);
+    font-weight: 500;
+    font-size: 11.5px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--tinte-leise);
+    padding: 0 14px 8px 0;
+    border-bottom: 1px solid var(--linie-stark);
+  }
+  td {
+    padding: 11px 14px 11px 0;
+    border-bottom: 1px solid var(--linie);
+    vertical-align: baseline;
+  }
+  td:last-child, th:last-child { padding-right: 0; }
+  td.werkzeug {
+    font-family: var(--schrift-daten);
+    font-size: .82rem;
+    white-space: nowrap;
+    color: var(--akzent-tief);
+  }
+
+  /* ---------------------------------------------------------- Bausteine */
+
+  .gitter {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1px;
+    background: var(--linie);
+    border: 1px solid var(--linie);
+    margin: 22px 0 4px;
+  }
+  .gitter > div { background: var(--flaeche); padding: 16px 18px; }
+  .gitter h4 {
+    font-family: var(--schrift-daten);
+    font-size: 11.5px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--tinte-leise);
+    font-weight: 500;
+    margin: 0 0 7px;
+  }
+  .gitter p { margin: 0; font-size: .93rem; line-height: 1.5; }
+  .gitter b { font-family: var(--schrift-titel); font-weight: 600; }
+
+  /* ---------------------------------------------------------- Verzicht */
+
+  .verzicht { display: grid; gap: 0; margin: 22px 0 4px; }
+  .verzicht > div {
+    display: grid;
+    grid-template-columns: 22px minmax(0, 1fr);
+    gap: 14px;
+    padding: 15px 0;
+    border-top: 1px solid var(--linie);
+  }
+  .verzicht > div:last-child { border-bottom: 1px solid var(--linie); }
+  .verzicht .zeichen {
+    font-family: var(--schrift-daten);
+    font-size: 1.05rem;
+    line-height: 1.4;
+    color: var(--akzent-tief);
+  }
+  .verzicht b { font-family: var(--schrift-titel); font-weight: 600; font-size: .98rem; }
+  .verzicht p { margin: 3px 0 0; font-size: .95rem; line-height: 1.52; }
+
+  /* ---------------------------------------------------------- Schaubild */
+
+  figure { margin: 26px 0 4px; }
+  figcaption {
+    font-family: var(--schrift-daten);
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--tinte-leise);
+    margin-top: 12px;
+  }
+  .schaubild {
+    background: var(--flaeche);
+    border: 1px solid var(--linie);
+    padding: 18px;
+    overflow-x: auto;
+  }
+  .schaubild svg { display: block; min-width: 440px; width: 100%; height: auto; }
+  .sb-kasten { fill: var(--flaeche-leise); stroke: var(--linie-stark); }
+  .sb-kern { fill: none; stroke: var(--akzent); stroke-width: 2; }
+  .sb-titel { font-family: var(--schrift-titel); font-weight: 600; font-size: 13px; fill: var(--tinte); }
+  .sb-klein { font-family: var(--schrift-daten); font-size: 10.5px; fill: var(--tinte-leise); }
+  .sb-pfad { font-family: var(--schrift-daten); font-size: 10.5px; fill: var(--tinte-leise); }
+  .sb-linie { stroke: var(--linie-stark); stroke-width: 1.4; fill: none; }
+
+  /* ---------------------------------------------------------- Kartenmuster */
+
+  .muster {
+    background: var(--zettel-vorn);
+    color: var(--zettel-tinte);
+    border-radius: 6px;
+    padding: 20px 20px 18px;
+    box-shadow: 0 10px 22px rgba(0,0,0,.22);
+    max-width: 380px;
+  }
+  .muster .frage {
+    font-family: var(--schrift-titel);
+    font-weight: 600;
+    font-size: 1rem;
+    margin: 0 0 14px;
+    line-height: 1.35;
+  }
+  .muster .reihe {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: rgba(255,255,255,.42);
+    border: 1.5px solid rgba(43,36,16,.18);
+    border-radius: 4px;
+    padding: 8px 11px;
+    margin-bottom: 7px;
+    font-size: .9rem;
+  }
+  .muster .reihe.ja { border-color: var(--ja); background: rgba(47,158,82,.2); }
+  .muster .reihe.nein { border-color: var(--nein); background: rgba(196,52,43,.16); }
+  .muster .taste {
+    font-family: var(--schrift-daten);
+    font-size: 11px;
+    border: 1px solid rgba(43,36,16,.3);
+    border-radius: 3px;
+    padding: 1px 6px;
+  }
+  .muster .urteil {
+    font-family: var(--schrift-titel);
+    font-weight: 600;
+    font-size: .82rem;
+    margin: 12px 0 0;
+    color: #7a1d17;
+  }
+
+  .taste-inline {
+    font-family: var(--schrift-daten);
+    font-size: .78em;
+    border: 1px solid var(--linie-stark);
+    border-bottom-width: 2px;
+    border-radius: 3px;
+    padding: 1px 6px;
+    background: var(--flaeche);
+    white-space: nowrap;
+  }
+
+  /* ---------------------------------------------------------- Merksatz */
+
+  .merksatz {
+    border-left: 3px solid var(--akzent);
+    padding: 4px 0 4px 20px;
+    margin: 24px 0;
+    font-size: 1.03rem;
+  }
+  .merksatz p:last-child { margin-bottom: 0; }
+
+  /* ---------------------------------------------------------- Fuß */
+
+  footer {
+    border-top: 1px solid var(--linie);
+    padding: 26px 28px 60px;
+    max-width: 1040px;
+    margin: 0 auto;
+    font-family: var(--schrift-daten);
+    font-size: 12px;
+    color: var(--tinte-leise);
+    line-height: 1.7;
+  }
+
+  :focus-visible { outline: 2px solid var(--akzent-tief); outline-offset: 2px; }
+
+  @media (max-width: 940px) {
+    .huelle { grid-template-columns: minmax(0, 1fr); gap: 0; }
+    .schiene {
+      position: static;
+      padding: 34px 0 0;
+      border-bottom: 1px solid var(--linie);
+      padding-bottom: 18px;
+    }
+    .schiene ol {
+      grid-auto-flow: column;
+      grid-auto-columns: max-content;
+      gap: 0 22px;
+      overflow-x: auto;
+      padding-bottom: 6px;
+    }
+    .schiene a { padding-left: 0; border-left: 0; border-bottom: 2px solid var(--linie); padding-bottom: 4px; }
+    section { padding-top: 48px; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+  }
+</style>
+</head>
+<body>
+
+<header class="band">
+  <div class="band-innen">
+    <p class="augenbraue">Technische Beschreibung</p>
+    <h1>Flashcards für die Berufsschule</h1>
+    <p class="vorspann">
+      Karteikarten und Quizfragen als Lernseite im Netz. Die Lehrkraft gibt ihrem
+      KI-Agenten ein Arbeitsblatt und bekommt einen Link zurück. Die Klasse öffnet
+      ihn und legt los – ohne Konto, ohne App, ohne dass irgendwo ein Ergebnis
+      gespeichert wird.
+    </p>
+    <p class="adresse">https://karten.deine-schule.de/<b>anker-blaue-feder</b></p>
+    <div class="kenndaten">
+      <span>Stand <b>4. September 2026</b></span>
+      <span>Lizenz <b>MIT</b></span>
+      <span>Python 3.13 · FastAPI · <b>PostgreSQL 17</b></span>
+      <span>Betrieb <b>Docker Compose</b></span>
+    </div>
+  </div>
+</header>
+
+<div class="huelle">
+
+  <nav class="schiene" aria-label="Inhalt">
+    <ol>
+      <li><a href="#zweck">Zweck</a></li>
+      <li><a href="#ueberblick">Überblick</a></li>
+      <li><a href="#begriffe">Begriffe</a></li>
+      <li><a href="#lehrkraft">Bedienung: Lehrkraft</a></li>
+      <li><a href="#lernende">Bedienung: Klasse</a></li>
+      <li><a href="#verzicht">Bewusster Verzicht</a></li>
+      <li><a href="#technik">Aufbau</a></li>
+      <li><a href="#sicherheit">Sicherheit</a></li>
+      <li><a href="#betrieb">Betrieb</a></li>
+      <li><a href="#grenzen">Grenzen</a></li>
+    </ol>
+  </nav>
+
+  <main class="inhalt">
+
+    <!-- ================================================== 1 -->
+    <section id="zweck">
+      <h2>Zweck</h2>
+      <p class="lead">
+        Eine Lehrkraft an einer Berufsschule soll Lernmaterial in Minuten
+        veröffentlichen können, ohne eine Software zu bedienen, ohne Daten
+        ihrer Schülerinnen und Schüler zu verwalten und ohne jemanden um
+        Erlaubnis zu fragen.
+      </p>
+      <p>
+        Das Programm löst genau eine Aufgabe: Es macht aus Unterrichtsinhalten
+        eine Lernseite, die unter einem teilbaren Link im Browser läuft. Der
+        Inhalt kommt nicht über eine Eingabemaske herein, sondern über einen
+        KI-Agenten – die Lehrkraft schickt ein Arbeitsblatt, eine Vokabelliste
+        oder einen Prüfungskatalog in den Chat und bekommt eine fertige Adresse
+        zurück.
+      </p>
+      <p>
+        Für die Lernenden ist es eine gewöhnliche Webseite: Link öffnen,
+        Startknopf drücken, Karte für Karte durcharbeiten, am Ende das Ergebnis
+        sehen. Es gibt keine Anmeldung, keine Installation und keine Spur, die
+        zurückbleibt.
+      </p>
+      <div class="merksatz">
+        <p>
+          Die gestaltende Entscheidung des Projekts: <strong>Die Verwaltungsoberfläche
+          ist der Chat.</strong> Es gibt keinen Adminbereich, in den sich jemand
+          einloggen könnte – und damit auch keinen, den jemand angreifen,
+          erklären oder pflegen müsste.
+        </p>
+      </div>
+    </section>
+
+    <!-- ================================================== 2 -->
+    <section id="ueberblick">
+      <h2>Das Ganze in einem Bild</h2>
+      <p>
+        Zwei Wege führen zur selben Anwendung. Der obere gehört der Lehrkraft und
+        ist abgesichert; der untere gehört der Klasse und ist offen für jeden, der
+        die Adresse kennt.
+      </p>
+
+      <figure>
+        <div class="schaubild">
+          <svg viewBox="0 0 520 304" role="img" aria-label="Schaubild: Die Lehrkraft pflegt Inhalte über einen KI-Agenten, der über HTTPS und OAuth 2.1 mit dem MCP-Endpunkt spricht; die Klasse ruft die Lernseite über einen Drei-Wort-Link auf. Beide treffen auf dieselbe Anwendung, die ihre Daten in PostgreSQL hält.">
+            <defs>
+              <marker id="spitze" viewBox="0 0 10 10" refX="9" refY="5"
+                      markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--linie-stark)"></path>
+              </marker>
+            </defs>
+
+            <!-- Lehrkraft -->
+            <rect class="sb-kasten" x="4" y="14" width="140" height="46" rx="4"></rect>
+            <text class="sb-titel" x="74" y="38" text-anchor="middle">Lehrkraft</text>
+            <text class="sb-klein" x="74" y="53" text-anchor="middle">im Chat</text>
+
+            <!-- KI-Agent -->
+            <rect class="sb-kasten" x="4" y="88" width="140" height="46" rx="4"></rect>
+            <text class="sb-titel" x="74" y="112" text-anchor="middle">KI-Agent</text>
+            <text class="sb-klein" x="74" y="127" text-anchor="middle">z. B. Claude Cowork</text>
+
+            <!-- Klasse -->
+            <rect class="sb-kasten" x="4" y="196" width="140" height="46" rx="4"></rect>
+            <text class="sb-titel" x="74" y="220" text-anchor="middle">Klasse</text>
+            <text class="sb-klein" x="74" y="235" text-anchor="middle">im Browser</text>
+
+            <!-- Anwendung -->
+            <rect class="sb-kasten" x="300" y="14" width="210" height="210" rx="4"></rect>
+            <rect class="sb-kern" x="300" y="14" width="210" height="210" rx="4"></rect>
+            <text class="sb-titel" x="405" y="38" text-anchor="middle">Anwendung</text>
+            <text class="sb-klein" x="405" y="54" text-anchor="middle">FastAPI · ein Prozess</text>
+
+            <rect x="314" y="70" width="182" height="30" rx="3" fill="var(--flaeche)" stroke="var(--linie)"></rect>
+            <text class="sb-pfad" x="325" y="89">POST /mcp — pflegen</text>
+
+            <rect x="314" y="106" width="182" height="30" rx="3" fill="var(--flaeche)" stroke="var(--linie)"></rect>
+            <text class="sb-pfad" x="325" y="125">/oauth/… — anmelden</text>
+
+            <rect x="314" y="142" width="182" height="30" rx="3" fill="var(--flaeche)" stroke="var(--linie)"></rect>
+            <text class="sb-pfad" x="325" y="161">GET /{adresse} — lernen</text>
+
+            <rect x="314" y="178" width="182" height="30" rx="3" fill="var(--flaeche)" stroke="var(--linie)"></rect>
+            <text class="sb-pfad" x="325" y="197">GET /healthz</text>
+
+            <!-- Datenbank -->
+            <rect class="sb-kasten" x="300" y="250" width="210" height="46" rx="4"></rect>
+            <text class="sb-titel" x="405" y="274" text-anchor="middle">PostgreSQL</text>
+            <text class="sb-klein" x="405" y="289" text-anchor="middle">Volume „pgdata“</text>
+
+            <!-- Pfeile -->
+            <line class="sb-linie" x1="74" y1="60" x2="74" y2="84" marker-end="url(#spitze)"></line>
+
+            <line class="sb-linie" x1="144" y1="111" x2="296" y2="111" marker-end="url(#spitze)"></line>
+            <text class="sb-klein" x="220" y="103" text-anchor="middle">MCP · OAuth 2.1</text>
+
+            <line class="sb-linie" x1="144" y1="219" x2="296" y2="219" marker-end="url(#spitze)"></line>
+            <text class="sb-klein" x="220" y="211" text-anchor="middle">Link aus drei Wörtern</text>
+
+            <line class="sb-linie" x1="405" y1="224" x2="405" y2="246" marker-end="url(#spitze)"></line>
+          </svg>
+        </div>
+        <figcaption>
+          Die Anwendung ist ein einziger Prozess: Lernseiten, MCP-Endpunkt und
+          OAuth-Server liegen darin nebeneinander. Der Agent spricht ausschließlich
+          über HTTPS mit ihr. Nach außen erreichbar sind nur
+          HTTP-Wege; die Datenbank hat weder lokal noch auf dem Server einen
+          veröffentlichten Port.
+        </figcaption>
+      </figure>
+    </section>
+
+    <!-- ================================================== 3 -->
+    <section id="begriffe">
+      <h2>Die vier Begriffe, die man kennen muss</h2>
+
+      <h3>Die Drei-Wort-Adresse</h3>
+      <p>
+        Jede veröffentlichte Seite bekommt eine Adresse aus drei deutschen
+        Wörtern – Adjektiv, Nomen, Verb, aus je 200 Wörtern gewürfelt. Das sind
+        acht Millionen mögliche Adressen. Sie ist gleichzeitig der Zugang: Wer
+        sie hat, darf lernen; wer sie nicht hat, bekommt dieselbe Fehlerseite wie
+        bei einem Tippfehler. Lernpakete und Sammlungen teilen sich einen
+        einzigen Adressraum, den die Datenbank selbst eindeutig hält.
+      </p>
+
+      <h3>Das Lernpaket</h3>
+      <p>
+        Eine Lernseite mit ihren Karten – der Normalfall, etwa „Unregelmäßige
+        Verben, Teil 3“. Es trägt einen Titel, wahlweise einen Einleitungstext in
+        Markdown und eine <span class="m">Gruppe</span> (ein Fach oder eine
+        Klasse, etwa „Englisch“ oder „WBA3“), die der Lehrkraft beim Wiederfinden
+        hilft und die Lernenden nicht weiter betrifft.
+      </p>
+
+      <h3>Die Karte</h3>
+      <p>Es gibt genau zwei Arten:</p>
+      <ul class="punkte">
+        <li>
+          <strong>Karteikarte</strong> – Vorderseite und Rückseite. Anklicken
+          dreht sie um.
+        </li>
+        <li>
+          <strong>Frage</strong> – zwei bis vier Antwortmöglichkeiten, genau eine
+          davon richtig, dazu wahlweise eine Erklärung, die nach dem Antworten
+          erscheint.
+        </li>
+      </ul>
+      <p>
+        Alle Textfelder sind Markdown und auf 5.000 Zeichen begrenzt; Titel auf
+        200, Gruppe auf 60.
+      </p>
+
+      <h3>Die Sammlung</h3>
+      <p>
+        Ein Bündel von Lernpaketen unter einer eigenen Drei-Wort-Adresse – damit
+        die Lehrkraft <em>einen</em> Link weitergeben kann statt dreizehn. Die
+        Sammlung zeigt ihre Pakete als nummerierte Liste; von einem Paket aus
+        führt ein Knopf weiter zum nächsten und einer zurück zur Übersicht. Ein
+        Lernpaket darf in mehreren Sammlungen liegen, jeweils an anderer Stelle.
+      </p>
+    </section>
+
+    <!-- ================================================== 4 -->
+    <section id="lehrkraft">
+      <h2>Bedienung durch die Lehrkraft</h2>
+      <p class="lead">
+        Über einen KI-Agenten, der sich einmalig mit dem Server verbindet.
+        Danach genügt der Satz: „Bau mir aus diesem Arbeitsblatt ein Lernpaket.“
+      </p>
+      <p>
+        Technisch ist das ein <strong>MCP-Server</strong> (Model Context
+        Protocol) unter <span class="m">POST /mcp</span>. Die Lehrkraft trägt in
+        ihrem Agenten – erprobt mit Claude Cowork – die Adresse dieses Endpunkts
+        ein, meldet sich einmal mit dem Passwort an, das der Betreiber gesetzt
+        hat, und bestätigt die Verbindung. Von da an stehen dem Agenten vierzehn
+        Werkzeuge zur Verfügung. Nach jeder Änderung antwortet der Server mit dem
+        vollständigen, anklickbaren Link.
+      </p>
+
+      <h3>Werkzeuge für Lernpakete</h3>
+      <div class="rollt">
+        <table>
+          <thead>
+            <tr><th>Werkzeug</th><th>Wofür</th></tr>
+          </thead>
+          <tbody>
+            <tr><td class="werkzeug">bundle_anlegen</td><td>Ein neues Lernpaket samt allen Karten in einem Aufruf</td></tr>
+            <tr><td class="werkzeug">bundle_liste</td><td>Was gibt es? Filterbar nach Gruppe; stillgelegte auf Wunsch</td></tr>
+            <tr><td class="werkzeug">bundle_anzeigen</td><td>Ein Paket mit allen Karten und deren Kennungen</td></tr>
+            <tr><td class="werkzeug">bundle_aendern</td><td>Titel, Beschreibung, Gruppe, Reihenfolge, Stichprobe – der Link bleibt</td></tr>
+            <tr><td class="werkzeug">bundle_deaktivieren</td><td>Unsichtbar schalten und wieder zurück</td></tr>
+            <tr><td class="werkzeug">karten_hinzufuegen</td><td>Weitere Karten, wahlweise an einer bestimmten Stelle</td></tr>
+            <tr><td class="werkzeug">karte_aendern</td><td>Eine einzelne Karte berichtigen</td></tr>
+            <tr><td class="werkzeug">karte_loeschen</td><td>Eine einzelne Karte entfernen</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Werkzeuge für Sammlungen</h3>
+      <div class="rollt">
+        <table>
+          <thead>
+            <tr><th>Werkzeug</th><th>Wofür</th></tr>
+          </thead>
+          <tbody>
+            <tr><td class="werkzeug">sammlung_anlegen</td><td>Eine neue Sammlung, wahlweise gleich mit Paketen</td></tr>
+            <tr><td class="werkzeug">sammlung_liste</td><td>Übersicht, wie bei den Lernpaketen</td></tr>
+            <tr><td class="werkzeug">sammlung_anzeigen</td><td>Eine Sammlung mit ihren Paketen in ihrer Reihenfolge</td></tr>
+            <tr><td class="werkzeug">sammlung_aendern</td><td>Titel, Beschreibung, Gruppe</td></tr>
+            <tr><td class="werkzeug">sammlung_pakete_setzen</td><td>Welche Pakete in welcher Reihenfolge darin stehen</td></tr>
+            <tr><td class="werkzeug">sammlung_deaktivieren</td><td>Unsichtbar schalten und wieder zurück</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Was sich pro Lernpaket einstellen lässt</h3>
+      <ul class="punkte">
+        <li>
+          <strong>Reihenfolge</strong> – <span class="m">zufall</span> mischt die
+          Karten bei jedem Durchlauf neu, <span class="m">fest</span> behält die
+          eingegebene Folge bei. Die Antwortmöglichkeiten einer Frage werden in
+          beiden Fällen immer neu gemischt.
+        </li>
+        <li>
+          <strong>Karten pro Durchlauf</strong> – aus einem Paket mit 200 Karten
+          werden bei jedem Start etwa 20 zufällig gezogen. Ohne Angabe kommen
+          alle dran.
+        </li>
+        <li>
+          <strong>Selbsteinschätzung</strong> – ob Karteikarten mit „Wusste ich“
+          / „Wusste ich nicht“ ins Ergebnis eingehen oder reines Lernmaterial
+          bleiben.
+        </li>
+      </ul>
+
+      <p>
+        <strong>Endgültiges Löschen gibt es nicht.</strong> Ein Paket oder eine
+        Sammlung lässt sich stilllegen – Aufrufer sehen dann einen Hinweis statt
+        der Seite –, aber nichts kann versehentlich weggeworfen werden. Deshalb
+        wird auch keine Adresse je wieder frei.
+      </p>
+    </section>
+
+    <!-- ================================================== 5 -->
+    <section id="lernende">
+      <h2>Bedienung durch die Klasse</h2>
+      <p class="lead">
+        Der Link geht in den Klassenchat, als QR-Code an die Wand oder auf das
+        Arbeitsblatt. Alles Weitere passiert im Browser.
+      </p>
+
+      <h3>Der Ablauf</h3>
+      <ul class="punkte">
+        <li>
+          <strong>Startseite.</strong> Titel, Gruppe, Einleitungstext und die
+          Zusammensetzung des Pakets: wie viele Karten insgesamt, wie viele zum
+          Lernen, wie viele Fragen. Wird nur eine Stichprobe abgefragt, steht das
+          dabei. Dann: „Los geht's“.
+        </li>
+        <li>
+          <strong>Karteikarte.</strong> Vorderseite lesen, umdrehen, Rückseite
+          lesen. Ist die Selbsteinschätzung eingeschaltet, folgt die Frage, ob
+          man es wusste.
+        </li>
+        <li>
+          <strong>Frage.</strong> Eine Antwort von A bis D wählen. Die Auflösung
+          kommt sofort: richtig oder falsch, dazu die richtige Antwort und, falls
+          hinterlegt, die Erklärung.
+        </li>
+        <li>
+          <strong>Ergebnis.</strong> Punktzahl, ein kurzes Fazit und die Liste
+          dessen, was danebenging. Von dort führen drei Wege weiter: alles
+          nochmal, nur die Fehler, oder – innerhalb einer Sammlung – weiter zum
+          nächsten Paket.
+        </li>
+      </ul>
+
+      <figure>
+        <div class="muster" aria-hidden="true">
+          <p class="frage">Welche Kündigungsfrist gilt in der Probezeit?</p>
+          <div class="reihe nein"><span class="taste">A</span>Vier Wochen zum Monatsende</div>
+          <div class="reihe ja"><span class="taste">B</span>Zwei Wochen, ohne Termin</div>
+          <div class="reihe"><span class="taste">C</span>Sechs Wochen zum Quartalsende</div>
+          <p class="urteil">Leider falsch — Richtig ist: Zwei Wochen, ohne Termin</p>
+        </div>
+        <figcaption>
+          Schematisch: eine beantwortete Frage nach der Auflösung. Die gewählte
+          Antwort ist rot umrandet, die richtige grün. Die Farben und der gelbe
+          Zettel stammen aus der Anwendung selbst.
+        </figcaption>
+      </figure>
+
+      <h3>Tastatur</h3>
+      <p>
+        Die Seite ist vollständig mit der Tastatur bedienbar, und jeder Knopf
+        trägt sein Kürzel sichtbar: <span class="taste-inline">Enter</span>
+        startet, <span class="taste-inline">Leertaste</span> dreht eine
+        Karteikarte um, <span class="taste-inline">A</span>–<span class="taste-inline">D</span>
+        beantworten eine Frage, <span class="taste-inline">←</span> und
+        <span class="taste-inline">→</span> blättern. Beim Blättern wandert der
+        Fokus mit, und jede Auflösung wird für Sprachausgaben angesagt.
+      </p>
+    </section>
+
+    <!-- ================================================== 6 -->
+    <section id="verzicht">
+      <h2>Was das Programm bewusst nicht tut</h2>
+      <p>
+        Diese Punkte sind keine Lücken, sondern der Kern des Entwurfs. Sie sind
+        der Grund, warum die Anwendung in einer Schule ohne Rückfragen laufen
+        kann.
+      </p>
+
+      <div class="verzicht">
+        <div>
+          <span class="zeichen">—</span>
+          <div>
+            <b>Keine Anmeldung für Lernende</b>
+            <p>Kein Konto, kein Passwort, keine Klassenliste. Wer den Link hat, kann lernen.</p>
+          </div>
+        </div>
+        <div>
+          <span class="zeichen">—</span>
+          <div>
+            <b>Keine gespeicherten Ergebnisse</b>
+            <p>Die Punktzahl steht am Ende auf dem Bildschirm und ist danach fort. Sie wird nirgends gespeichert und nirgends übermittelt – auch nicht an die Lehrkraft.</p>
+          </div>
+        </div>
+        <div>
+          <span class="zeichen">—</span>
+          <div>
+            <b>Keine Cookies, kein Speicher im Browser, keine Zählpixel</b>
+            <p>Der Zwischenstand lebt nur im Arbeitsspeicher der geöffneten Seite. Neu laden heißt neu anfangen. Nach dem Laden spricht die Seite mit niemandem mehr – keine weitere Serveranfrage.</p>
+          </div>
+        </div>
+        <div>
+          <span class="zeichen">—</span>
+          <div>
+            <b>Keine fremden Server</b>
+            <p>Keine Schriftarten, Bilder oder Skripte von außerhalb. Die Sicherheitsrichtlinie der Seite verbietet sie ausdrücklich; die Anwendung liefert alles selbst aus.</p>
+          </div>
+        </div>
+        <div>
+          <span class="zeichen">—</span>
+          <div>
+            <b>Keine Verwaltungsoberfläche</b>
+            <p>Es gibt keine Anmeldeseite für Menschen. Inhalte kommen ausschließlich über den KI-Agenten herein.</p>
+          </div>
+        </div>
+        <div>
+          <span class="zeichen">—</span>
+          <div>
+            <b>Kein endgültiges Löschen</b>
+            <p>Nur Stilllegen. Ein falsch verstandener Auftrag kann kein halbes Schuljahr Arbeit vernichten.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================== 7 -->
+    <section id="technik">
+      <h2>Aufbau</h2>
+      <p>
+        Drei Container, mehr nicht. Die Anwendung selbst ist ein einziger
+        Prozess: Lernseiten, MCP-Endpunkt und OAuth-Server sind Routen darin,
+        keine getrennten Dienste.
+      </p>
+
+      <div class="gitter">
+        <div>
+          <h4>Anwendung</h4>
+          <p><b>Python 3.13, FastAPI, uvicorn.</b> Seiten aus Jinja2-Vorlagen, Daten über SQLAlchemy, Schema-Änderungen über Alembic.</p>
+        </div>
+        <div>
+          <h4>Datenbank</h4>
+          <p><b>PostgreSQL 17</b>, das offizielle Abbild, unverändert. Ohne veröffentlichten Port – nur aus dem Docker-Netz erreichbar.</p>
+        </div>
+        <div>
+          <h4>Rückwärtsproxy</h4>
+          <p><b>Caddy</b>, nur im Serverbetrieb. Holt das HTTPS-Zertifikat selbsttätig bei Let's Encrypt und erneuert es.</p>
+        </div>
+      </div>
+
+      <h3>Wie die Inhalte zur Seite werden</h3>
+      <p>
+        Alle Texte sind Markdown. Beim Ausliefern rendert
+        <span class="m">markdown-it</span> sie zu HTML, und
+        <span class="m">nh3</span> säubert das Ergebnis anschließend gegen eine
+        Positivliste erlaubter Elemente – Attribute werden vollständig entfernt.
+        Das ist die einzige Stelle, an der aus Text HTML wird, und damit die
+        Verteidigungslinie zwischen dem, was ein Agent schreibt, und dem, was im
+        Browser der Lernenden landet. Antworttexte, Titel und Gruppe laufen gar
+        nicht erst durch diesen Weg und werden immer als reiner Text gesetzt.
+      </p>
+      <p>
+        Die Karten reisen als Datenblock mit der Seite mit. Der Ablauf im Browser
+        – Mischen, Umdrehen, Auswerten – läuft danach ohne jede weitere Anfrage
+        an den Server.
+      </p>
+
+      <h3>Was die Datenbank selbst erzwingt</h3>
+      <p>
+        Ein großer Teil der Regeln steht nicht im Programmcode, sondern als
+        Bedingung im Schema: dass eine Frage zwischen zwei und vier Antworten
+        hat, dass genau eine davon als richtig markiert ist, dass keine davon
+        leer ist, dass eine Karteikarte eine Rückseite hat und eine Frage keine,
+        dass Titel und Karteninhalte ihre Längengrenzen einhalten. Falsche Daten
+        können deshalb gar nicht erst hineingelangen – unabhängig davon, welcher
+        Agent sie schickt.
+      </p>
+    </section>
+
+    <!-- ================================================== 8 -->
+    <section id="sicherheit">
+      <h2>Sicherheit</h2>
+
+      <h3>Der Zugang der Lehrkraft</h3>
+      <p>
+        Der MCP-Endpunkt ist mit <strong>OAuth 2.1</strong> abgesichert. Der
+        Agent meldet sich selbsttätig als Client an (dynamische Registrierung),
+        findet die Endpunkte über die üblichen Discovery-Dokumente und weist sich
+        mit <span class="m">PKCE&nbsp;S256</span> aus, nicht mit einem
+        Client-Geheimnis. Der einzige menschliche Schritt ist eine
+        Zustimmungsseite, auf der das Betreiberpasswort eingegeben wird – die
+        einzige Seite des Projekts mit einem Formular.
+      </p>
+      <ul class="punkte">
+        <li>Ein Autorisierungscode gilt <strong>zehn Minuten</strong> und lässt sich genau einmal einlösen.</li>
+        <li>Ein Zugriffstoken gilt <strong>eine Stunde</strong>, ein Erneuerungstoken <strong>30 Tage</strong>.</li>
+        <li>Erneuerungstokens rotieren. Wird ein bereits verbrauchter zum zweiten Mal vorgelegt, verfällt die gesamte Token-Familie – ein gestohlener Token wird dadurch erkennbar und wertlos.</li>
+        <li>Tokens und Codes liegen ausschließlich als Hash in der Datenbank.</li>
+        <li>Alle öffentlichen Adressen entstehen aus dem eingetragenen Wert <span class="m">BASE_URL</span> und niemals aus einem Anfragekopf – hinter einem Rückwärtsproxy wären die fälschbar.</li>
+      </ul>
+
+      <h3>Der Zugang der Lernenden</h3>
+      <p>
+        Es gibt keinen. Die Lernseite ist öffentlich für jeden, der die Adresse
+        kennt. Eine formal falsche und eine unbekannte Adresse liefern dieselbe
+        Antwort, sodass sich aus dem Unterschied nichts erraten lässt; ein
+        stillgelegtes Paket sagt ausdrücklich, dass es stillgelegt wurde.
+      </p>
+
+      <h3>Im Browser</h3>
+      <p>
+        Jede Antwort trägt eine strenge Inhaltsrichtlinie: <span class="m">default-src
+        'none'</span>. Skripte und Stile nur von der Seite selbst, keine Bilder,
+        keine Schriftarten, keine Netzverbindungen, keine Einbettung in fremde
+        Rahmen. Der Datenblock mit den Karten wird so eingebettet, dass ein
+        Karteninhalt ihn nicht verlassen kann.
+      </p>
+      <p>
+        HTTPS ist Pflicht, nicht Empfehlung: Die verbindenden Agenten sprechen
+        ausschließlich über HTTPS mit dem Server.
+      </p>
+    </section>
+
+    <!-- ================================================== 9 -->
+    <section id="betrieb">
+      <h2>Betrieb</h2>
+      <p class="lead">
+        Ein kleiner Server ab etwa vier Euro im Monat genügt. Auf dem Server
+        selbst wird nichts gebaut und nichts eingerichtet; das fertige Abbild
+        kommt aus der Registry.
+      </p>
+
+      <h3>Die vier Werte, die gesetzt werden müssen</h3>
+      <div class="rollt">
+        <table>
+          <thead><tr><th>Wert</th><th>Bedeutung</th></tr></thead>
+          <tbody>
+            <tr><td class="werkzeug">DATABASE_URL</td><td>Wo die Datenbank steht, samt Zugangsdaten</td></tr>
+            <tr><td class="werkzeug">APP_SECRET</td><td>Signaturschlüssel für die OAuth-Tokens; lang und zufällig</td></tr>
+            <tr><td class="werkzeug">TEACHER_PASSWORD</td><td>Das eine Passwort, mit dem sich die Lehrkraft beim Verbinden anmeldet</td></tr>
+            <tr><td class="werkzeug">BASE_URL</td><td>Die öffentliche Adresse. Pflichtangabe ohne Vorgabewert – ohne sie startet die Anwendung nicht.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        <span class="m">BASE_URL</span> hat mit Absicht keinen Vorgabewert: Aus
+        ihr entstehen sowohl die Links, die die Lehrkraft bekommt, als auch alle
+        OAuth-Adressen. Ein vergessener Wert soll beim Start auffallen und nicht
+        erst an einem Link, den niemand öffnen kann.
+      </p>
+
+      <h3>Sichern</h3>
+      <p>
+        Alles, was zu sichern ist, liegt im Docker-Volume
+        <span class="m">pgdata</span>. Wer dieses Volume sichert, hat alles; die
+        Anwendung bringt deshalb keine eigene Sicherungsfunktion mit. Das
+        Herunterfahren des Verbunds lässt das Volume unberührt – nur ein
+        ausdrücklicher Zusatzschalter wirft es mit weg.
+      </p>
+
+      <h3>Nachsehen, ob es läuft</h3>
+      <p>
+        Unter <span class="m">/healthz</span> antwortet die Anwendung mit ihrem
+        Zustand und dem der Datenbank – geeignet für eine automatische
+        Überwachung.
+      </p>
+
+      <h3>Prüfen und Ausrollen</h3>
+      <p>
+        Die Testsuite läuft im Container gegen genau den Stapel, der später auch
+        im Betrieb läuft: dasselbe Abbild, dasselbe PostgreSQL 17. Auf dem
+        Rechner braucht es dafür nichts außer Docker.
+        <strong>339 Testfunktionen</strong> decken die Werkzeuge, den
+        OAuth-Ablauf, die Datenbankregeln und die Seiten ab; hinzu kommen
+        Browsertests gegen einen echten Chromium. Ein Lauf prüft außerdem, ob
+        Datenmodell und Migrationen auseinandergelaufen sind.
+      </p>
+      <p>
+        Bei jeder Änderung an der Hauptlinie läuft dieselbe Suite in der
+        Fließbandumgebung. Erst danach – und nur bei grünem Ergebnis – wird das
+        Abbild gebaut, in die Registry geladen und auf dem Betriebsserver
+        ausgerollt. Die Reihenfolge ist der Punkt.
+      </p>
+    </section>
+
+    <!-- ================================================== 10 -->
+    <section id="grenzen">
+      <h2>Grenzen und Annahmen</h2>
+      <p>
+        Damit niemand etwas erwartet, was das Programm nicht leistet:
+      </p>
+      <ul class="punkte">
+        <li>
+          <strong>Kein Lernstand, keine Auswertung.</strong> Es gibt keinerlei
+          Rückmeldung darüber, wer was wie oft geübt hat. Wer eine Bewertung
+          braucht, braucht ein anderes Werkzeug.
+        </li>
+        <li>
+          <strong>Die Adresse ist der einzige Schutz.</strong> Ein Link, der
+          weitergegeben wird, ist offen. Für Prüfungsinhalte, die niemand vorher
+          sehen darf, ist die Anwendung nicht gedacht.
+        </li>
+        <li>
+          <strong>Ein Passwort für alle Pflegenden.</strong> Es gibt keine
+          Benutzerverwaltung – wer das Betreiberpasswort kennt, kann sämtliche
+          Inhalte pflegen.
+        </li>
+        <li>
+          <strong>Nur Text.</strong> Karten tragen Markdown, keine Bilder,
+          Audiodateien oder Anhänge. Die Sicherheitsrichtlinie verbietet
+          Bildquellen ausdrücklich.
+        </li>
+        <li>
+          <strong>Zwei bis vier Antwortmöglichkeiten je Frage</strong>, genau
+          eine richtig. Mehrfachauswahl, Lückentexte oder Zuordnungsaufgaben gibt
+          es nicht.
+        </li>
+        <li>
+          <strong>Nichts wird gelöscht.</strong> Wer Inhalte wirklich entfernen
+          muss, kommt an die Datenbank – über die Anwendung geht es nicht.
+        </li>
+      </ul>
+      <p>
+        Die Anwendung setzt voraus, dass ein KI-Agent mit MCP-Unterstützung
+        vorhanden ist. Ohne ihn lassen sich keine Inhalte anlegen; die bereits
+        veröffentlichten Lernseiten laufen davon unberührt weiter.
+      </p>
+    </section>
+
+  </main>
+</div>
+
+<footer>
+  Flashcards für die Berufsschule · MIT-Lizenz · © 2026 Bastian Strauss, Varel<br>
+  Diese Beschreibung gibt den Stand vom 4. September 2026 wieder. Anleitungen zum
+  Serverbetrieb und zum Verbinden des Agenten liegen im Projekt unter
+  <span class="m">docs/</span>.
+</footer>
+
+</body>
+</html>
