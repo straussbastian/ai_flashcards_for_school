@@ -93,13 +93,17 @@ jobs:
             echo "COOLIFY_AUTH_TOKEN ist nicht gesetzt."
             echo "In Coolify unter 'Keys & Tokens' einen API-Token anlegen und"
             echo "hier hinterlegen:  gh secret set COOLIFY_AUTH_TOKEN"
+            echo "Der Token muss aus derselben Coolify-Instanz stammen, auf der"
+            echo "die Anwendung laeuft - sonst antwortet Coolify mit HTTP 401."
             fehlt=1
           fi
           if [ -z "${{ secrets.COOLIFY_WEBHOOK_URL }}" ]; then
             echo "COOLIFY_WEBHOOK_URL ist nicht gesetzt."
             echo "Das ist die Deploy-Adresse der Anwendung, zum Beispiel"
-            echo "  https://vps.wus.services/api/v1/deploy?uuid=DEINE-UUID"
-            echo "ohne den Parameter force - den haengt der naechste Schritt an."
+            echo "  https://COOLIFY-ADRESSE/api/v1/deploy?uuid=APP-UUID"
+            echo "COOLIFY-ADRESSE ist die Instanz, auf der die Anwendung laeuft,"
+            echo "APP-UUID steht in Coolify in der Adresszeile der Anwendung."
+            echo "Ohne den Parameter force - den haengt der naechste Schritt an."
             echo "Hinterlegen mit:  gh secret set COOLIFY_WEBHOOK_URL"
             fehlt=1
           fi
