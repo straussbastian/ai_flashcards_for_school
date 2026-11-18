@@ -12,13 +12,16 @@ dependencies = [
     "pydantic-settings>=2.7",
     "jinja2>=3.1",
     "markdown-it-py>=3.0",
-    # Das offizielle MCP-SDK. Untergrenze 2.1: Erst ab 2.x heisst die Klasse
-    # MCPServer (mcp.server.mcpserver) und liefert streamable_http_app() eine
-    # Starlette-App, die sich als ASGI-Anwendung einhaengen laesst. Obergrenze
-    # 3: Ein Hauptversionssprung hat dieses SDK bereits einmal komplett
-    # umbenannt (mcp.server.fastmcp wirft heute einen ModuleNotFoundError mit
-    # Migrationshinweis) - das soll die CI melden und nicht der Betrieb.
-    "mcp>=2.1,<3",
+    # Das offizielle MCP-SDK. Erst ab 2.x heisst die Klasse MCPServer
+    # (mcp.server.mcpserver) und liefert streamable_http_app() eine
+    # Starlette-App, die sich als ASGI-Anwendung einhaengen laesst. Die
+    # Untergrenze 2.2 kommt aus der Sicherheit: 2.1.x sammelt in der
+    # StreamableHTTP-Transportschicht Sitzungen unbegrenzt an
+    # (GHSA-84m7-p3x7-pcfv). Obergrenze 3: Ein Hauptversionssprung hat dieses
+    # SDK bereits einmal komplett umbenannt (mcp.server.fastmcp wirft heute
+    # einen ModuleNotFoundError mit Migrationshinweis) - das soll die CI
+    # melden und nicht der Betrieb.
+    "mcp>=2.2,<3",
     "nh3>=0.2.20",
 ]
 
@@ -31,6 +34,18 @@ dev = [
     # kommt nicht ueber pip: "uv run playwright install chromium" laedt ihn
     # einmalig herunter (siehe README).
     "playwright>=1.55",
+]
+
+# Untergrenzen fuer Pakete, die nur mittelbar ins Abbild kommen (ueber mcp
+# bzw. alembic). Sie gelten nur beim Aufloesen von uv.lock und machen die
+# Pakete nicht zu eigenen Abhaengigkeiten. Sie verhindern, dass ein spaeteres
+# "uv lock" auf eine Version mit bekannter Luecke zurueckfaellt. Die Zahlen
+# stammen aus dem Coolify-Schwachstellenscan vom 18.11.2026.
+[tool.uv]
+constraint-dependencies = [
+    "pyjwt>=2.15",                # u. a. GHSA-ffc3-869f-jxw9 (kritisch), GHSA-42vr-xj54-vc7v
+    "opentelemetry-api>=1.45.2",  # GHSA-mf5v-w3w3-f6cg, GHSA-xcq7-p3pf-p88h
+    "mako>=1.4.2",                # GHSA-5639-2j2p-m4mx
 ]
 
 [tool.pytest.ini_options]

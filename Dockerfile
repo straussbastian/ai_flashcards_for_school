@@ -6,6 +6,18 @@
 # fort: kein Prozessverwalter, kein initdb, kein Aufraeumen verwaister
 # Sperrdateien, kein su postgres. Die Datenbank kommt jetzt unveraendert aus
 # dem offiziellen postgres-Abbild.
+
+# uv als eigene Stufe, gepinnt auf einen Digest statt :latest, damit der
+# Build reproduzierbar bleibt und sich nicht unbemerkt unter uns aendert.
+#
+# uv kommt NICHT ins Betriebsabbild, sondern wird nur waehrend der
+# RUN-Schritte eingehaengt (RUN --mount=from=uv ...). Zur Laufzeit braucht es
+# niemand: app-start.sh und test-start.sh rufen uvicorn bzw. pytest direkt
+# aus /app/.venv. Frueher lag das Binary unter /usr/local/bin/uv, und der
+# Schwachstellenscan in Coolify meldete die darin einkompilierte
+# rustls-Bibliothek (GHSA-2mjx-qc3c-rqvc u. a.) als Luecke des Abbilds.
+FROM ghcr.io/astral-sh/uv@sha256:88bc6eb1ccd4b82efd0e1b530caffabddf50dc2bf612e66c14ea25b8ee8a4d3d AS uv
+
 FROM python:3.13-slim-trixie AS betrieb
 
 ENV PYTHONUNBUFFERED=1 \
@@ -16,16 +28,19 @@ ENV PYTHONUNBUFFERED=1 \
 # uebernahm vorher supervisord. tzdata, weil TZ sonst ins Leere zeigt: Das
 # schlanke Python-Abbild bringt keine Zeitzonendatenbank mit (vorher kam sie
 # als Beifang mit den PostgreSQL-Paketen).
-RUN apt-get update && apt-get install -y --no-install-recommends \
+#
+# apt-get upgrade, weil das Python-Basisabbild den Debian-Sicherheitsupdates
+# hinterherlaeuft und der Docker-Cache auf dem Server ein altes Basisabbild
+# beliebig lange weiterverwendet. So kommen behobene Systembibliotheken (etwa
+# zlib1g, CVE-2026-85091) beim naechsten Neubau dieser Schicht mit.
+RUN apt-get update \
+    && apt-get upgrade -y \
+    && apt-get install -y --no-install-recommends \
         tini \
         tzdata \
         ca-certificates \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --system --no-create-home --shell /usr/sbin/nologin app
-
-# Gepinnt auf einen Digest statt :latest, damit der Build reproduzierbar
-# bleibt und sich nicht unbemerkt unter uns aendert.
-COPY --from=ghcr.io/astral-sh/uv@sha256:88bc6eb1ccd4b82efd0e1b530caffabddf50dc2bf612e66c14ea25b8ee8a4d3d /uv /usr/local/bin/uv
 
 WORKDIR /app
 
@@ -34,7 +49,8 @@ WORKDIR /app
 # ist noetig, weil app/ hier noch nicht kopiert ist - hatchling braucht das
 # Paketverzeichnis, um das Projekt selbst zu bauen (siehe unten).
 COPY pyproject.toml uv.lock .python-version ./
-RUN uv sync --frozen --no-dev --no-install-project
+RUN --mount=from=uv,source=/uv,target=/usr/local/bin/uv \
+    uv sync --frozen --no-dev --no-install-project
 
 COPY app ./app
 COPY migrations ./migrations
@@ -43,7 +59,8 @@ COPY docker ./docker
 RUN chmod +x docker/*.sh
 
 # Jetzt, wo app/ vorhanden ist, auch das Projekt selbst installieren.
-RUN uv sync --frozen --no-dev
+RUN --mount=from=uv,source=/uv,target=/usr/local/bin/uv \
+    uv sync --frozen --no-dev
 
 # Der ganze Container laeuft unprivilegiert. Das ging vorher nicht: initdb
 # und PostgreSQL brauchten root bzw. den Benutzer postgres, weshalb nur der
@@ -98,7 +115,8 @@ ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 # Jetzt MIT den dev-Abhaengigkeiten (pytest, pytest-asyncio, httpx2,
 # playwright). Oben lief dasselbe Kommando mit --no-dev.
 COPY pyproject.toml uv.lock .python-version ./
-RUN uv sync --frozen
+RUN --mount=from=uv,source=/uv,target=/usr/local/bin/uv \
+    uv sync --frozen
 
 COPY tests ./tests
 
@@ -106,7 +124,8 @@ COPY tests ./tests
 # Debian braucht. Ohne sie startet der Browser mit einem Fehler ueber eine
 # fehlende .so-Datei, und das sieht nach einem kaputten Test aus statt nach
 # einem fehlenden Paket. Danach a+rX, damit "app" den Browser auch lesen darf.
-RUN uv run playwright install --with-deps chromium \
+RUN --mount=from=uv,source=/uv,target=/usr/local/bin/uv \
+    uv run playwright install --with-deps chromium \
     && chmod -R a+rX /ms-playwright \
     && rm -rf /var/lib/apt/lists/*
 
