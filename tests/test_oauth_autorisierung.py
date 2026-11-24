@@ -181,3 +181,91 @@ def test_die_zustimmungsseite_erlaubt_ihr_eigenes_formular(client, konfiguration
     assert "http://localhost:*" in richtlinie
     assert "http://127.0.0.1:*" in richtlinie
     assert "form-action 'none'" not in richtlinie
+
+
+# ---- Zusaetzlich freigegebene Rueckadressen (EXTRA_REDIRECT_URIS) ----------
+
+
+def _client_mit_rueckadresse(client, rueckadresse: str) -> str:
+    antwort = client.post(
+        "/oauth/register",
+        json={"client_name": "n8n", "redirect_uris": [rueckadresse]},
+    )
+    assert antwort.status_code == 201
+    return antwort.json()["client_id"]
+
+
+def test_freigegebene_rueckadresse_bekommt_nach_dem_passwort_den_code(
+    client, zusaetzliche_rueckadresse
+):
+    """Der ganze Weg fuer n8n: registrieren, Passwort, Weiterleitung."""
+    kennung = _client_mit_rueckadresse(client, zusaetzliche_rueckadresse)
+    werte = _parameter(
+        kennung, neues_geheimnis(), redirect_uri=zusaetzliche_rueckadresse
+    )
+    antwort = client.post(
+        "/oauth/authorize",
+        data={**werte, "passwort": TEST_LEHRERINNEN_PASSWORT},
+        follow_redirects=False,
+    )
+    assert antwort.status_code == 302
+    ziel = urlsplit(antwort.headers["location"])
+    assert f"{ziel.scheme}://{ziel.netloc}{ziel.path}" == zusaetzliche_rueckadresse
+    assert len(parse_qs(ziel.query)["code"][0]) == 43
+
+
+def test_zurueckgenommene_freigabe_sperrt_den_bereits_registrierten_client(
+    client, zusaetzliche_rueckadresse, monkeypatch
+):
+    """Wer die Adresse aus EXTRA_REDIRECT_URIS streicht, will, dass dorthin
+    nichts mehr geht - auch fuer einen Client, der sich vorher registriert
+    hat. Sonst gaebe der Server weiter Codes an eine Adresse aus, die die
+    Richtlinie der Zustimmungsseite gar nicht mehr erlaubt."""
+    from app.config import get_settings
+
+    kennung = _client_mit_rueckadresse(client, zusaetzliche_rueckadresse)
+    monkeypatch.delenv("EXTRA_REDIRECT_URIS")
+    get_settings.cache_clear()
+
+    werte = _parameter(
+        kennung, neues_geheimnis(), redirect_uri=zusaetzliche_rueckadresse
+    )
+    for antwort in (
+        client.get("/oauth/authorize", params=werte, follow_redirects=False),
+        client.post(
+            "/oauth/authorize",
+            data={**werte, "passwort": TEST_LEHRERINNEN_PASSWORT},
+            follow_redirects=False,
+        ),
+    ):
+        assert antwort.status_code == 400
+        assert "location" not in antwort.headers
+
+
+def test_die_zustimmungsseite_erlaubt_den_ursprung_der_freigabe(
+    client, zusaetzliche_rueckadresse
+):
+    """form-action gilt auch fuer die Weiterleitung nach dem Absenden. Fehlt
+    der Ursprung von n8n darin, blockiert der Browser den Ruecksprung - und
+    am Server faellt nichts auf."""
+    kennung = _client_id(client)
+    richtlinie = client.get(
+        "/oauth/authorize", params=_parameter(kennung, neues_geheimnis())
+    ).headers["content-security-policy"]
+    form_action = next(
+        teil.strip() for teil in richtlinie.split(";")
+        if teil.strip().startswith("form-action")
+    )
+    quellen = form_action.split()[1:]
+    assert "https://n8n.example.de" in quellen
+    assert "https://claude.ai" in quellen
+
+
+def test_ohne_freigabe_steht_kein_fremder_ursprung_in_der_richtlinie(
+    client, konfiguration
+):
+    kennung = _client_id(client)
+    richtlinie = client.get(
+        "/oauth/authorize", params=_parameter(kennung, neues_geheimnis())
+    ).headers["content-security-policy"]
+    assert "n8n.example.de" not in richtlinie

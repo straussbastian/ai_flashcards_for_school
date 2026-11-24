@@ -56,3 +56,29 @@ def test_claude_rueckadresse_passt_nur_exakt():
 
 def test_fremde_uri_passt_zu_nichts():
     assert not passt("https://boese.example/callback", [CLAUDE_RUECKSPRUNG])
+
+
+# ---- Zusaetzlich freigegebene Rueckadressen (EXTRA_REDIRECT_URIS) ----------
+
+N8N = "https://n8n.example.de/rest/oauth2-credential/callback"
+
+
+def test_zusaetzliche_rueckadresse_ist_nur_mit_freigabe_registrierbar():
+    assert not registrierbar(N8N)
+    assert registrierbar(N8N, zusaetzliche=(N8N,))
+
+
+@pytest.mark.parametrize(
+    "uri",
+    [
+        N8N + "/extra",                                       # Pfad angehaengt
+        N8N + "?x=1",                                         # Query angehaengt
+        "http://n8n.example.de/rest/oauth2-credential/callback",  # http statt https
+        "https://n8n.example.de.boese.example/rest/oauth2-credential/callback",
+        "https://N8N.example.de/rest/oauth2-credential/callback",  # anders geschrieben
+    ],
+)
+def test_zusaetzliche_rueckadresse_gilt_nur_exakt(uri):
+    """Exakter Zeichenvergleich wie bei claude.ai - kein Praefix, keine
+    Normalisierung."""
+    assert not registrierbar(uri, zusaetzliche=(N8N,))

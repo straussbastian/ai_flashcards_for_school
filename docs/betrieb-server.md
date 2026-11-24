@@ -138,6 +138,38 @@ Die ausführliche Fassung mit allen Zwischenprüfungen steht in
 [praxistest-cowork.md](praxistest-cowork.md); dort wird zum Ausprobieren
 ein Tunnel statt eines Servers benutzt, ab Schritt 4 ist es dasselbe.
 
+### Andere MCP-Clients, zum Beispiel n8n
+
+Von sich aus lässt der Server nur Claude (Rückadresse
+`https://claude.ai/api/mcp/auth_callback`) und Claude Code (`localhost`)
+an. Ein anderer Client wie n8n meldet beim Verbinden eine eigene
+Rückadresse an, und die muss der Server ausdrücklich kennen:
+
+1. In n8n ein Credential vom Typ **MCP OAuth2 API** anlegen. Oben steht
+   die *OAuth Redirect URL*, etwa
+   `https://n8n.example.de/rest/oauth2-credential/callback`.
+2. Genau diese Adresse in die `.env` (bzw. in Coolify) eintragen:
+
+   ```
+   EXTRA_REDIRECT_URIS=https://n8n.example.de/rest/oauth2-credential/callback
+   ```
+
+   Mehrere Adressen werden durch Kommas getrennt. Erlaubt sind nur
+   vollständige `https`-Adressen; der Vergleich geschieht Zeichen für
+   Zeichen. Eine unbrauchbare Angabe lässt die Anwendung gar nicht erst
+   starten – die Meldung steht dann im Log.
+3. Neu starten (`docker compose -f compose.server.yml up -d` bzw. in
+   Coolify neu ausrollen).
+4. In n8n: *Register Client Automatically* an, *Server URL*
+   `https://karten.deine-schule.de/mcp`, *Resource URL* leer lassen, dann
+   **Connect**. Es öffnet sich dieselbe Zustimmungsseite wie bei Claude;
+   dort das `TEACHER_PASSWORD` eingeben.
+
+Wer eine Adresse wieder aus `EXTRA_REDIRECT_URIS` streicht und neu
+startet, sperrt den Client dahinter aus: keine neue Anmeldung und keine
+Erneuerung mehr. Ein bereits ausgegebener Zugriffstoken gilt noch bis zu
+seinem Ablauf, also höchstens eine Stunde. Claude ist davon nie betroffen.
+
 ---
 
 ## Ohne Kommandozeile: der Docker Manager bei Hostinger
@@ -211,6 +243,8 @@ docker compose -f compose.server.yml up -d
 | `{"status":"ok","datenbank":"nicht erreichbar"}` | Der Dienst `db` ist nicht hochgekommen: `logs db`. |
 | Die App startet nicht, im Log steht `BASE_URL muss mit http:// oder https:// beginnen` | `DOMAIN` in der `.env` ist leer geblieben. |
 | Der Connector verbindet sich nicht | Die eingetragene Adresse muss exakt `https://<DOMAIN>/mcp` sein und `DOMAIN` exakt der Domain entsprechen, unter der der Server läuft. |
+| n8n (oder ein anderer Client) meldet `invalid_redirect_uri` | Seine Rückadresse fehlt in `EXTRA_REDIRECT_URIS` oder ist dort anders geschrieben. Siehe „Andere MCP-Clients“ oben. |
+| Die App startet nicht, im Log steht `EXTRA_REDIRECT_URIS darf nur …` | Eine der Adressen ist kein vollständiges `https://…` oder enthält Leerzeichen, Semikolon oder Anführungszeichen. |
 | Alles läuft, aber die Links in den Antworten des Agenten zeigen woandershin | `DOMAIN` wurde nach dem ersten Start geändert, ohne neu zu starten. |
 
 **Zum privaten Paket** – das betrifft nur die Betreiberin des Repositories,

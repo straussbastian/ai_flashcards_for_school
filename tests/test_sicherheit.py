@@ -112,3 +112,27 @@ def test_die_lockere_richtlinie_gilt_nur_fuer_die_zustimmungsseite():
     assert "form-action 'none'" in RICHTLINIE
     assert "claude.ai" not in RICHTLINIE
     assert "form-action 'none'" not in ZUSTIMMUNG_RICHTLINIE
+
+
+def test_die_freigabe_lockert_die_richtlinie_der_lernseite_nicht(monkeypatch):
+    """Der n8n-Ursprung gehoert nur auf die Zustimmungsseite. Auf der
+    Lernseite bleibt form-action 'none'."""
+    from app.config import get_settings
+
+    monkeypatch.setenv(
+        "EXTRA_REDIRECT_URIS", "https://n8n.example.de/rest/oauth2-credential/callback"
+    )
+    get_settings.cache_clear()
+    app.dependency_overrides[get_session] = lambda: _MitVorbereitetemBundle(
+        _lernseite_bundle()
+    )
+    try:
+        kopf = TestClient(app).get("/kluge-tafel-leuchtet").headers.get(
+            "content-security-policy", ""
+        )
+    finally:
+        del app.dependency_overrides[get_session]
+        get_settings.cache_clear()
+
+    assert "form-action 'none'" in kopf
+    assert "n8n.example.de" not in kopf

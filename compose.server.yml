@@ -77,6 +77,9 @@ services:
       BASE_URL: https://${DOMAIN}
       APP_SECRET: '${APP_SECRET:?APP_SECRET fehlt - erzeugen mit openssl rand -hex 32}'
       TEACHER_PASSWORD: ${TEACHER_PASSWORD:?TEACHER_PASSWORD fehlt}
+      # Optional: weitere OAuth-Rueckadressen, z.B. fuer n8n. Leer ist der
+      # Normalfall - dann verbinden sich nur Claude und Claude Code.
+      EXTRA_REDIRECT_URIS: ${EXTRA_REDIRECT_URIS:-}
       TZ: ${TZ:-Europe/Berlin}
     restart: unless-stopped
 

@@ -81,3 +81,29 @@ def test_registrierung_ist_von_ueberall_aufrufbar(client, konfiguration):
 
 def test_die_antwort_wird_nicht_zwischengespeichert(client, konfiguration):
     assert _registrieren(client).headers["cache-control"] == "no-store"
+
+
+# ---- Zusaetzlich freigegebene Rueckadressen (EXTRA_REDIRECT_URIS) ----------
+
+
+def test_freigegebene_zusaetzliche_rueckadresse_wird_registriert(
+    client, zusaetzliche_rueckadresse
+):
+    """Der Fall n8n: eigene Callback-URL, vom Betreiber freigegeben."""
+    antwort = _registrieren(client, redirect_uris=[zusaetzliche_rueckadresse])
+    assert antwort.status_code == 201
+    assert antwort.json()["redirect_uris"] == [zusaetzliche_rueckadresse]
+
+
+def test_ohne_freigabe_wird_dieselbe_adresse_abgelehnt(client, konfiguration):
+    from tests.conftest import TEST_ZUSAETZLICHE_RUECKADRESSE
+
+    antwort = _registrieren(client, redirect_uris=[TEST_ZUSAETZLICHE_RUECKADRESSE])
+    assert antwort.status_code == 400
+    assert antwort.json()["error"] == "invalid_redirect_uri"
+
+
+def test_claude_bleibt_neben_der_freigabe_erlaubt(client, zusaetzliche_rueckadresse):
+    """Die Freigabe ergaenzt die Liste, sie ersetzt sie nicht - sonst
+    braeche jede neue Verbindung aus Cowork, sobald n8n dazukommt."""
+    assert _registrieren(client).status_code == 201

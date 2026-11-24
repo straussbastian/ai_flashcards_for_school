@@ -186,3 +186,78 @@ async def test_der_familienwiderruf_ueberlebt_die_ablehnung(client, konfiguratio
         },
     )
     assert await zugriffstoken_pruefen(session, zweite["access_token"]) is None
+
+
+# ---- Zusaetzlich freigegebene Rueckadressen (EXTRA_REDIRECT_URIS) ----------
+
+
+def _tokenpaar_ueber(client, rueckadresse: str) -> tuple[str, str]:
+    """Der ganze Ablauf fuer einen Client mit eigener Rueckadresse (n8n).
+
+    Returns:
+        (refresh_token, client_id)
+    """
+    kennung = client.post(
+        "/oauth/register",
+        json={"client_name": "n8n", "redirect_uris": [rueckadresse]},
+    ).json()["client_id"]
+    verifier = neues_geheimnis()
+    antwort = client.post(
+        "/oauth/authorize",
+        data={
+            "response_type": "code",
+            "client_id": kennung,
+            "redirect_uri": rueckadresse,
+            "scope": "lernseiten",
+            "code_challenge": pkce_ableiten(verifier),
+            "code_challenge_method": "S256",
+            "passwort": TEST_LEHRERINNEN_PASSWORT,
+        },
+        follow_redirects=False,
+    )
+    code = parse_qs(urlsplit(antwort.headers["location"]).query)["code"][0]
+    tokens = client.post(
+        "/oauth/token",
+        data={
+            "grant_type": "authorization_code",
+            "code": code,
+            "redirect_uri": rueckadresse,
+            "client_id": kennung,
+            "code_verifier": verifier,
+        },
+    )
+    assert tokens.status_code == 200
+    return tokens.json()["refresh_token"], kennung
+
+
+def _erneuern(client, refresh_token: str, kennung: str):
+    return client.post(
+        "/oauth/token",
+        data={
+            "grant_type": "refresh_token",
+            "refresh_token": refresh_token,
+            "client_id": kennung,
+        },
+    )
+
+
+def test_freigegebener_client_kann_erneuern(client, zusaetzliche_rueckadresse):
+    refresh_token, kennung = _tokenpaar_ueber(client, zusaetzliche_rueckadresse)
+    assert _erneuern(client, refresh_token, kennung).status_code == 200
+
+
+def test_zurueckgenommene_freigabe_beendet_die_erneuerung(
+    client, zusaetzliche_rueckadresse, monkeypatch
+):
+    """Jede Erneuerung gibt einen neuen, wieder 30 Tage gueltigen
+    Erneuerungstoken aus. Ohne diese Pruefung bliebe ein einmal verbundenes
+    n8n dauerhaft drin, obwohl der Betreiber seine Adresse gestrichen hat."""
+    from app.config import get_settings
+
+    refresh_token, kennung = _tokenpaar_ueber(client, zusaetzliche_rueckadresse)
+    monkeypatch.delenv("EXTRA_REDIRECT_URIS")
+    get_settings.cache_clear()
+
+    antwort = _erneuern(client, refresh_token, kennung)
+    assert antwort.status_code == 400
+    assert antwort.json()["error"] == "invalid_grant"

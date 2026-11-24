@@ -296,6 +296,10 @@ Links, die die Lehrkraft bekommt, als auch alle OAuth-Adressen. Ein vergessener
 Wert soll beim Start auffallen und nicht erst an einem Link, den niemand öffnen
 kann.
 
+Optional ist `EXTRA_REDIRECT_URIS`: weitere OAuth-Rückadressen neben Claude
+und Claude Code, kommagetrennt, etwa die Callback-URL einer n8n-Instanz. Ohne
+diesen Wert verbinden sich nur Claude und Claude Code.
+
 ### Sichern
 
 Alles, was zu sichern ist, liegt im Docker-Volume `pgdata`. Wer dieses Volume

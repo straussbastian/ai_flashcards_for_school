@@ -5,6 +5,10 @@ Die Spec nennt in Abschnitt 5:
   - http://localhost/callback  mit ignoriertem Port  (Claude Code)
   - http://127.0.0.1/callback  mit ignoriertem Port  (Claude Code)
 
+Dazu kommen nur die Adressen, die der Betreiber ausdruecklich in
+EXTRA_REDIRECT_URIS freigibt (etwa fuer n8n). Ohne diese Variable bleibt es
+bei den dreien.
+
 Der ignorierte Port ist keine Nachlaessigkeit: Claude Code oeffnet beim
 Verbinden einen lokalen Server auf einem freien Port und kann deshalb nicht
 vorher registrieren, welcher es sein wird. RFC 8252 Abschnitt 7.3 sieht
@@ -16,6 +20,7 @@ Praefix-Pruefung wie startswith("https://claude.ai"): Damit waere
 https://claude.ai.boese.example erlaubt.
 """
 
+from collections.abc import Collection
 from urllib.parse import urlsplit
 
 CLAUDE_RUECKSPRUNG = "https://claude.ai/api/mcp/auth_callback"
@@ -45,9 +50,14 @@ def _loopback_kennung(uri: str) -> tuple[str, str] | None:
     return teile.hostname, teile.path
 
 
-def registrierbar(uri: str) -> bool:
-    """Ob diese Adresse ueberhaupt registriert werden darf."""
-    if uri == CLAUDE_RUECKSPRUNG:
+def registrierbar(uri: str, zusaetzliche: Collection[str] = ()) -> bool:
+    """Ob diese Adresse ueberhaupt registriert werden darf.
+
+    zusaetzliche sind die Adressen aus EXTRA_REDIRECT_URIS (app/config.py),
+    etwa die Callback-URL einer n8n-Instanz. Auch fuer sie gilt exakter
+    Zeichenvergleich - aus demselben Grund wie bei claude.ai.
+    """
+    if uri == CLAUDE_RUECKSPRUNG or uri in zusaetzliche:
         return True
     return _loopback_kennung(uri) is not None
 

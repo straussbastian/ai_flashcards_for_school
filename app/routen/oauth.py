@@ -127,14 +127,16 @@ async def registrieren(
             f"{CLAUDE_RUECKSPRUNG} sowie http://localhost/callback und "
             "http://127.0.0.1/callback.",
         )
+    zusaetzliche = get_settings().extra_redirect_uris
     for uri in wunsch.redirect_uris:
-        if not registrierbar(uri):
+        if not registrierbar(uri, zusaetzliche):
             return _fehler(
                 "invalid_redirect_uri",
                 f"Die Rückadresse {uri!r} ist auf diesem Server nicht "
                 f"erlaubt. Erlaubt sind {CLAUDE_RUECKSPRUNG} sowie "
                 "http://localhost/callback und http://127.0.0.1/callback "
-                "(der Port darf dort abweichen).",
+                "(der Port darf dort abweichen) und die Adressen, die der "
+                "Betreiber in EXTRA_REDIRECT_URIS freigegeben hat.",
             )
 
     kunde = await client_anlegen(
@@ -223,6 +225,16 @@ async def _vorpruefen(
             "Die Rückadresse der Anfrage gehört nicht zu diesem Client. "
             "Bitte entferne den Connector in Claude und füge ihn noch "
             "einmal hinzu.",
+        )
+    # Noch einmal gegen die aktuelle Freigabe: Ein Client, der sich mit einer
+    # Adresse aus EXTRA_REDIRECT_URIS registriert hat, verliert den Zugang,
+    # sobald der Betreiber sie dort streicht. Fuer claude.ai und Loopback
+    # aendert diese Pruefung nichts - die sind immer registrierbar.
+    if not registrierbar(redirect_uri, get_settings().extra_redirect_uris):
+        return _seite_mit_fehler(
+            anfrage,
+            "Die Rückadresse dieses Clients ist auf diesem Server nicht "
+            "mehr freigegeben.",
         )
 
     state = werte["state"]
@@ -350,10 +362,27 @@ async def token_ausgeben(
             )
             scope = eingeloest.scope
         elif grant_type == "refresh_token":
+            client_id = str(formular.get("client_id") or "")
+            # Jede Erneuerung gibt einen neuen, wieder 30 Tage gueltigen
+            # Erneuerungstoken aus. Ohne diese Pruefung bliebe ein Client,
+            # dessen Adresse der Betreiber aus EXTRA_REDIRECT_URIS gestrichen
+            # hat, auf Dauer verbunden. Claude und Claude Code trifft sie nie:
+            # Deren Adressen sind immer registrierbar. Einen unbekannten
+            # Client lehnt erneuern() ohnehin ab.
+            kunde = await client_holen(sitzung, client_id)
+            zusaetzliche = get_settings().extra_redirect_uris
+            if kunde is not None and not any(
+                registrierbar(uri, zusaetzliche) for uri in kunde.redirect_uris
+            ):
+                raise OAuthFehler(
+                    "invalid_grant",
+                    "Die Rückadresse dieses Clients ist auf diesem Server "
+                    "nicht mehr freigegeben.",
+                )
             zugriff, erneuerung, gueltigkeit = await erneuern(
                 sitzung,
                 erneuerungstoken=str(formular.get("refresh_token") or ""),
-                client_id=str(formular.get("client_id") or ""),
+                client_id=client_id,
             )
             scope = SCOPE
         else:

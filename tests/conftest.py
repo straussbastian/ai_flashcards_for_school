@@ -197,8 +197,33 @@ def konfiguration(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("BASE_URL", TEST_BASIS_URL)
     monkeypatch.setenv("APP_SECRET", TEST_APP_SECRET)
     monkeypatch.setenv("TEACHER_PASSWORD", TEST_LEHRERINNEN_PASSWORT)
+    # Ausdruecklich leer: Steht die Variable in der Umgebung des Ausfuehrenden,
+    # wuerden die Tests, die eine FREMDE Rueckadresse ablehnen sollen, still
+    # von ihr abhaengen.
+    monkeypatch.delenv("EXTRA_REDIRECT_URIS", raising=False)
     yield
     get_settings.cache_clear()
+
+
+# Eine Rueckadresse, wie sie eine n8n-Instanz bei der Registrierung schickt.
+# Bewusst eine erfundene Domain und nicht die einer echten Instanz.
+TEST_ZUSAETZLICHE_RUECKADRESSE = "https://n8n.example.de/rest/oauth2-credential/callback"
+
+
+@pytest.fixture
+def zusaetzliche_rueckadresse(
+    monkeypatch: pytest.MonkeyPatch, konfiguration: None
+) -> str:
+    """Gibt eine zusaetzliche Rueckadresse ueber EXTRA_REDIRECT_URIS frei.
+
+    Haengt an "konfiguration", damit die uebrigen Werte dieselben sind und
+    deren Abbau den get_settings-Cache am Ende wieder leert.
+    """
+    from app.config import get_settings
+
+    monkeypatch.setenv("EXTRA_REDIRECT_URIS", TEST_ZUSAETZLICHE_RUECKADRESSE)
+    get_settings.cache_clear()
+    return TEST_ZUSAETZLICHE_RUECKADRESSE
 
 
 @pytest_asyncio.fixture

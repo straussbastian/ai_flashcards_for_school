@@ -130,3 +130,61 @@ def test_get_settings_ist_gecacht(monkeypatch, _geleerte_cache):
     zweite_instanz = get_settings()
 
     assert erste_instanz is zweite_instanz
+
+
+# ---- EXTRA_REDIRECT_URIS ---------------------------------------------------
+#
+# Weitere OAuth-Rueckadressen neben claude.ai und Loopback, z.B. die einer
+# n8n-Instanz. Die Variable kommt als Klartext mit Kommas aus .env bzw.
+# Coolify - nicht als JSON-Liste, die niemand von Hand richtig eintippt.
+
+N8N = "https://n8n.example.de/rest/oauth2-credential/callback"
+MAKE = "https://hook.example.com/oauth/cb/mcp"
+
+
+def test_ohne_zusaetzliche_rueckadressen_ist_die_liste_leer():
+    assert _einstellungen().extra_redirect_uris == ()
+
+
+def test_zusaetzliche_rueckadressen_werden_an_kommas_getrennt():
+    einstellungen = _einstellungen(extra_redirect_uris=f" {N8N} , {MAKE},")
+    assert einstellungen.extra_redirect_uris == (N8N, MAKE)
+
+
+def test_zusaetzliche_rueckadressen_kommen_als_klartext_aus_der_umgebung(
+    monkeypatch, _geleerte_cache
+):
+    """pydantic-settings liest eine Sammlung sonst als JSON und scheitert
+    schon beim Start an einer gewoehnlichen Adresse."""
+    monkeypatch.setenv("DATABASE_URL", "postgresql://test:pw@db:5432/testdb")
+    monkeypatch.setenv("APP_SECRET", "test-geheim")
+    monkeypatch.setenv("TEACHER_PASSWORD", "test-passwort")
+    monkeypatch.setenv("BASE_URL", "https://test.example.com")
+    monkeypatch.setenv("EXTRA_REDIRECT_URIS", f"{N8N},{MAKE}")
+
+    assert get_settings().extra_redirect_uris == (N8N, MAKE)
+
+
+@pytest.mark.parametrize(
+    "wert",
+    [
+        pytest.param("http://n8n.example.de/callback", id="ohne_https"),
+        pytest.param("n8n.example.de/callback", id="ohne_schema"),
+        pytest.param("https:///callback", id="ohne_host"),
+        pytest.param("https://n8n.example.de/callback#oben", id="mit_fragment"),
+        pytest.param("https://nutzer:pw@n8n.example.de/callback", id="mit_zugangsdaten"),
+        pytest.param("https://n8n.example.de/call back", id="mit_leerzeichen"),
+        pytest.param("https://n8n.example.de/cb;script-src", id="mit_semikolon"),
+        pytest.param("https://n8n.example.de/cb'x", id="mit_hochkomma"),
+    ],
+)
+def test_untaugliche_zusaetzliche_rueckadresse_faellt_beim_start_auf(wert):
+    """Ein Tippfehler soll beim Start auffallen, nicht erst beim Verbinden.
+
+    Leerzeichen, Semikolon und Hochkomma sind zusaetzlich deshalb verboten,
+    weil der Ursprung der Adresse in die Content-Security-Policy der
+    Zustimmungsseite geschrieben wird - dort trennen genau diese Zeichen
+    Anweisungen und Quellen.
+    """
+    with pytest.raises(ValueError):
+        _einstellungen(extra_redirect_uris=wert)
