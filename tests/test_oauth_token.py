@@ -191,15 +191,19 @@ async def test_der_familienwiderruf_ueberlebt_die_ablehnung(client, konfiguratio
 # ---- Zusaetzlich freigegebene Rueckadressen (EXTRA_REDIRECT_URIS) ----------
 
 
-def _tokenpaar_ueber(client, rueckadresse: str) -> tuple[str, str]:
+def _tokenpaar_ueber(
+    client, rueckadresse: str, weitere: tuple[str, ...] = ()
+) -> tuple[str, str]:
     """Der ganze Ablauf fuer einen Client mit eigener Rueckadresse (n8n).
+
+    weitere sind zusaetzlich registrierte Rueckadressen desselben Clients.
 
     Returns:
         (refresh_token, client_id)
     """
     kennung = client.post(
         "/oauth/register",
-        json={"client_name": "n8n", "redirect_uris": [rueckadresse]},
+        json={"client_name": "n8n", "redirect_uris": [rueckadresse, *weitere]},
     ).json()["client_id"]
     verifier = neues_geheimnis()
     antwort = client.post(
@@ -255,6 +259,25 @@ def test_zurueckgenommene_freigabe_beendet_die_erneuerung(
     from app.config import get_settings
 
     refresh_token, kennung = _tokenpaar_ueber(client, zusaetzliche_rueckadresse)
+    monkeypatch.delenv("EXTRA_REDIRECT_URIS")
+    get_settings.cache_clear()
+
+    antwort = _erneuern(client, refresh_token, kennung)
+    assert antwort.status_code == 400
+    assert antwort.json()["error"] == "invalid_grant"
+
+
+def test_gemischt_registrierter_client_verliert_die_erneuerung_ebenfalls(
+    client, zusaetzliche_rueckadresse, monkeypatch
+):
+    """Wer neben der freigegebenen auch die Claude-Adresse registriert, darf
+    sich hinter ihr nicht verstecken: Ist EINE seiner Adressen nicht mehr
+    freigegeben, endet die Erneuerung."""
+    from app.config import get_settings
+
+    refresh_token, kennung = _tokenpaar_ueber(
+        client, zusaetzliche_rueckadresse, weitere=(CLAUDE_RUECKSPRUNG,)
+    )
     monkeypatch.delenv("EXTRA_REDIRECT_URIS")
     get_settings.cache_clear()
 

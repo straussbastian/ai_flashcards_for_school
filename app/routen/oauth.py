@@ -369,9 +369,13 @@ async def token_ausgeben(
             # hat, auf Dauer verbunden. Claude und Claude Code trifft sie nie:
             # Deren Adressen sind immer registrierbar. Einen unbekannten
             # Client lehnt erneuern() ohnehin ab.
+            #
+            # all() und nicht any(): Ein Client, der neben der gestrichenen
+            # auch die Claude-Adresse registriert hat, koennte sich sonst
+            # hinter dieser verstecken und bliebe verbunden.
             kunde = await client_holen(sitzung, client_id)
             zusaetzliche = get_settings().extra_redirect_uris
-            if kunde is not None and not any(
+            if kunde is not None and not all(
                 registrierbar(uri, zusaetzliche) for uri in kunde.redirect_uris
             ):
                 raise OAuthFehler(
